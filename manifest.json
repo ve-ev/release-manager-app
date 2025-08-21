@@ -5,8 +5,8 @@
   "$schema": "https://json.schemastore.org/youtrack-app.json",
   "version": "1.0.2",
   "vendor": {
-    "name": "JetBrains",
-    "url": "https://www.jetbrains.com"
+    "name": "E.V",
+    "url": "https://github.com/ve-ev/release-manager-app"
   },
   "icon": "icon.svg",
   "widgets": [
