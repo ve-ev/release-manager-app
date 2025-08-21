@@ -3,7 +3,7 @@
   "title": "Release Manager",
   "description": "",
   "$schema": "https://json.schemastore.org/youtrack-app.json",
-  "version": "1.0.2",
+  "version": "1.0.0",
   "vendor": {
     "name": "E.V",
     "url": "https://github.com/ve-ev/release-manager-app"
