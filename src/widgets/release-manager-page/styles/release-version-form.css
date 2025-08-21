@@ -1,0 +1,230 @@
+.container {
+  padding: calc(var(--ring-unit) * 2);
+  width: 100%;
+  max-width: 960px; /* Constrain width for better readability/alignment */
+  margin: 0 auto; /* Center the form content */
+}
+
+.formGroup {
+  margin-bottom: calc(var(--ring-unit) * 3);
+}
+
+/* Separator for form sections */
+.formSeparator {
+  height: 1px;
+  background-color: var(--ring-line-color);
+  margin: calc(var(--ring-unit) * 2) calc(var(--ring-unit) * 2);
+}
+
+.buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ring-unit);
+  margin-top: calc(var(--ring-unit) * 3);
+}
+
+.error {
+  margin-bottom: calc(var(--ring-unit) * 2);
+}
+
+.heading {
+  margin-bottom: calc(var(--ring-unit) * 3);
+}
+
+.markdownEditor {
+  width: 100%;
+  margin-top: var(--ring-unit);
+  border: 1px solid var(--ring-line-color);
+  border-radius: 3px;
+  padding: var(--ring-unit);
+}
+
+.markdownPreview {
+  margin-top: var(--ring-unit);
+  padding: var(--ring-unit);
+  border: 1px solid var(--ring-line-color);
+  border-radius: 3px;
+  background-color: var(--ring-content-background-color);
+}
+
+.linkedIssueItem {
+  padding: calc(var(--ring-unit) * 1.5);
+  margin: calc(var(--ring-unit) / 2) 0;
+  border: 1px solid var(--ring-line-color);
+  border-radius: 3px;
+  background-color: var(--ring-content-background-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.issueIdBadge {
+  display: inline-block;
+  box-sizing: border-box;
+  height: 20px;
+  margin-right: var(--ring-unit);
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1px solid var(--ring-main-color);
+  background-color: var(--ring-main-color);
+  color: #fff;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.issueSearchContainer {
+  display: flex;
+  align-items: flex-end; /* Align button with input baseline/edge */
+  gap: var(--ring-unit); /* Space between input and button */
+  flex-wrap: wrap; /* Wrap on small screens */
+}
+
+.issueSearchInput {
+  flex: 1 1 320px; /* Allow growing and shrinking with a sensible base */
+  min-width: 240px; /* Prevent too-small input on wrap */
+  margin-right: var(--ring-unit);
+}
+
+/* Keep the button aligned nicely when the container wraps */
+.issueSearchContainer > button,
+.issueSearchContainer > span > button {
+  align-self: flex-end;
+}
+
+.errorMessage {
+  margin-top: var(--ring-unit);
+  color: var(--ring-error-color);
+}
+
+.issueItemContent {
+  display: flex;
+  align-items: center;
+}
+
+.issuesList {
+  margin-top: calc(var(--ring-unit) * 2);
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-x: auto; /* Allow horizontal scroll for long content on small screens */
+}
+
+.issuesListTitle {
+  font-weight: bold;
+  margin-bottom: var(--ring-unit);
+}
+
+.previewTitle {
+  font-weight: bold;
+  margin-bottom: var(--ring-unit);
+}
+
+.monospaceInput {
+  font-family: monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  width: 100%;
+}
+
+.removeButton {
+  min-width: auto;
+  padding: 0 var(--ring-unit);
+  font-size: 16px;
+  line-height: 20px;
+}
+
+.label {
+  display: block;
+  margin-bottom: var(--ring-unit);
+  font-size: 12px;
+  color: var(--ring-secondary-color);
+}
+
+.datePickerWrapper {
+  position: relative;
+  /*margin-bottom: calc(var(--ring-unit) * 2);*/
+}
+
+.flex-row {
+  display: flex;
+  flex-direction: row;
+}
+
+.flex-row > [class*='col-'] {
+  flex-basis: auto;
+}
+
+.formPanel {
+  margin: calc(var(--ring-unit) * 2);
+  border-radius: 3px;
+}
+
+
+.ring-input {
+  width: 100%;
+  padding: calc(var(--ring-unit) * 1.5);
+  border: 1px solid var(--ring-line-color);
+  border-radius: 3px;
+  font-size: 15px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.ring-input-size_l {
+  min-height: calc(var(--ring-unit) * 10);
+}
+
+.issuesTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: calc(var(--ring-unit) * 2);
+  table-layout: fixed;
+}
+
+.issuesTable th {
+  text-align: left;
+  padding: calc(var(--ring-unit) * 0.75) var(--ring-unit);
+  border-bottom: 1px solid var(--ring-line-color);
+  font-weight: 500;
+}
+
+.issuesTable th:first-child {
+  width: 15%;
+}
+
+.issuesTable th:last-child {
+  width: 10%;
+  text-align: right;
+}
+
+.issuesTable td {
+  padding: calc(var(--ring-unit) * 0.75) var(--ring-unit);
+  border-bottom: 1px solid var(--ring-line-color);
+  vertical-align: middle;
+}
+
+.issuesTable td:last-child {
+  /* Align action buttons container to the right and keep remove button pinned */
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--ring-unit);
+  white-space: nowrap;
+}
+
+.issuesTable td:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ensure the meta-issue-only view uses the same inner width as other blocks */
+.meta-issue-form-container {
+  padding: 0; /* Avoid double padding from nested .container elements */
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center; /* Center the inner container */
+}

@@ -1,0 +1,80 @@
+.empty-state {
+  padding: calc(var(--ring-unit) * 4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Centered text card */
+.empty-state-text {
+  position: relative;
+  max-width: 560px;
+  width: 100%;
+  text-align: center;
+  background: var(--ring-content-background-color);
+  border-radius: var(--ring-border-radius);
+  padding: calc(var(--ring-unit) * 4);
+  box-shadow: var(--ring-popup-shadow);
+}
+
+.empty-state-actions {
+  display: flex;
+  gap: calc(var(--ring-unit) * 2);
+  margin-top: calc(var(--ring-unit) * 2);
+  justify-content: center;
+}
+
+.empty-state-tips {
+  margin-top: calc(var(--ring-unit) * 4);
+  color: var(--ring-secondary-color);
+  text-align: center;
+  /* Match heading-like appearance for both header and list */
+  font-size: 12px;
+}
+
+/* Make the Tips header closer to the list and visually unified */
+.empty-state-tips h4 {
+  margin: 0; /* remove default bottom margin */
+}
+
+.empty-state-tips-list {
+  margin-top: calc(var(--ring-unit) * 1); /* closer to header */
+  display: inline-block; /* center the list while keeping bullet alignment */
+  text-align: left;
+  padding-left: calc(var(--ring-unit) * 3);
+  font-size: inherit; /* same font as header */
+  font-weight: inherit; /* same font weight as header */
+}
+
+.empty-state-tips-list li {
+  margin: calc(var(--ring-unit) * 0.5) 0;
+}
+
+.empty-state-subtitle {
+  /* more space before actions */
+  margin: calc(var(--ring-unit) * 2) auto calc(var(--ring-unit) * 3);
+  max-width: 760px;
+  color: var(--ring-secondary-color);
+  font-weight: normal;
+}
+
+/* Decorative shadows behind the text card */
+.empty-state-purpleShadow,
+.empty-state-blueShadow {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  z-index: -1; /* render behind the card */
+}
+
+.empty-state-purpleShadow {
+  top: -36px;
+  left: -44px;
+  opacity: 0.9;
+}
+
+.empty-state-blueShadow {
+  right: -44px;
+  bottom: -36px;
+  opacity: 0.9;
+}

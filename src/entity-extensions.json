@@ -1,0 +1,29 @@
+{
+  "entityTypeExtensions": [
+    {
+      "entityType": "Project",
+      "properties": {
+        "releases": {
+          "type": "string"
+        },
+        "appSettings": {
+          "type": "string"
+        },
+        "issueStatusData": {
+          "type": "string"
+        },
+        "expandedVersion" : {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "entityType": "User",
+      "properties": {
+        "expandedVersion" : {
+          "type": "string"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+.release-notes-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.release-notes-panel {
+  width: 760px;
+  max-width: 95vw;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--ring-content-background-color);
+  border-radius: var(--ring-border-radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  padding: calc(var(--ring-unit) * 2);
+  box-sizing: border-box;
+}
+
+.release-notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--ring-unit);
+  border-bottom: 1px solid var(--ring-line-color);
+}
+
+.release-notes-header .title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.notes-container {
+  padding-top: var(--ring-unit);
+  flex: 1;
+  min-height: 0; /* allow flex child to shrink for overflow */
+}
+
+.notes-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.notes-textarea {
+  display: block;
+  width: 100%;
+  min-height: 280px;
+  resize: vertical;
+  box-sizing: border-box;
+  font-family: var(--ring-font-monospace, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace), serif;
+  line-height: 1.4;
+  white-space: pre;
+  padding-right: 36px; /* leave room for the overlaid copy button */
+}
+
+.copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  border-radius: 3px;
+  color: var(--ring-icon-color);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.2s ease;
+  z-index: 1; /* ensure it's above the textarea */
+}
+
+.notes-wrapper:hover .copy-button,
+.notes-wrapper:focus-within .copy-button {
+  opacity: 1;
+}
+
+.copy-button:hover {
+  background: var(--ring-hover-background-color);
+}
+
+.copy-button:focus-visible {
+  outline: 2px solid var(--ring-link-color, #0F5FFF);
+  outline-offset: 2px;
+}
+
+.copy-button.copied {
+  color: var(--ring-icon-success-color, var(--ring-success-color));
+}

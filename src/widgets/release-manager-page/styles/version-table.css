@@ -1,0 +1,610 @@
+.version-list-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.version-list-header {
+  display: flex;
+  padding: calc(var(--ring-unit) * 1.5) var(--ring-unit);
+  font-weight: 500;
+  border-bottom: 1px solid var(--ring-line-color);
+  background-color: var(--ring-content-background-color);
+  align-items: center;
+  min-height: calc(var(--ring-unit) * 3);
+  width: 100%;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.version-list-header-cell {
+  padding: 0 var(--ring-unit);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.version-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: calc(var(--ring-unit));
+}
+
+.version-list-item {
+  border-bottom: 1px solid var(--ring-line-color);
+}
+
+.version-list-row {
+  display: flex;
+  padding: calc(var(--ring-unit) * 2) var(--ring-unit);
+  align-items: center;
+  min-height: calc(var(--ring-unit) * 7);
+}
+
+.version-list-cell {
+  padding: 0 var(--ring-unit);
+  display: flex;
+  align-items: center;
+}
+
+.expand-cell {
+  width: calc(var(--ring-unit) * 3);
+  flex-shrink: 0;
+}
+
+.version-cell {
+  flex: 2;
+}
+
+.date-cell {
+  flex: 1;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.product-cell {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.status-cell {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.actions-cell {
+  width: calc(var(--ring-unit) * 10);
+  flex-shrink: 0;
+}
+
+.loader-container {
+  display: flex;
+  justify-content: center;
+  margin-top: calc(var(--ring-unit) * 6);
+}
+
+.error-message {
+  color: var(--ring-error-color);
+  padding: var(--ring-unit);
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+}
+
+/* Only show background color on hover */
+.ring-dropdown__item:hover {
+  background-color: var(--ring-hover-background-color) !important;
+  color: var(--ring-link-hover-color) !important;
+}
+
+.folder-opener-placeholder {
+  min-width: calc(var(--ring-unit) * 2);
+}
+
+.tree-view-button {
+  /* Increase specificity to override default Ring UI styles for hover state */
+  &&& {
+    background-color: var(--ring-sidebar-background-color);
+    transition: transform 0.2s;
+  }
+
+  & > span {
+    height: calc(var(--ring-unit) * 2);
+  }
+
+  line-height: calc(var(--ring-unit) * 2);
+  height: calc(var(--ring-unit) * 2);
+  width: calc(var(--ring-unit) * 2);
+  min-width: calc(var(--ring-unit) * 2);
+  transform: rotate(0deg);
+  display: flex;
+  justify-content: center;
+}
+
+.tree-view-button.closed {
+  transform: rotate(-90deg);
+}
+
+.tree-view-controller {
+  display: grid;
+  column-gap: var(--ring-unit);
+  align-items: center; /* align elements consistently */
+  width: 100%;
+  margin-left: 0; /* override any external margin-left applied */
+  padding-right: calc(var(--ring-unit) * 3); /* mirror left indentation for right side spacing */
+}
+
+/* In linked-issue rows, controls should magnet to the right border: remove extra right padding */
+.linked-issue-item .tree-view-controller {
+  padding-right: 0;
+}
+
+/* With controls: reserve fixed column for controls */
+.tree-view-controller.has-controls {
+  grid-template-columns: calc(var(--ring-unit) * 2) max-content minmax(0, 1fr) minmax(180px, max-content) 150px;
+}
+
+/* Without controls: do not reserve space for controls */
+.tree-view-controller.no-controls {
+  grid-template-columns: calc(var(--ring-unit) * 2) max-content minmax(0, 1fr) minmax(180px, max-content);
+}
+
+/* Ensure controls occupy the full width of the last grid column and are right-aligned */
+.tree-view-controller .issue-controls {
+  width: 150px; /* fixed width for controls */
+  justify-content: flex-end;
+  justify-self: end; /* magnet to the right border of the grid area */
+  /* Ensure the controls area never overflows into the summary cell */
+  min-width: 0;
+  overflow: hidden;
+  margin-left: var(--ring-unit); /* create gap between progress and tags */
+}
+
+/* Add spacing around progress indicator to avoid visual overlap with summary and tags; only when controls are present */
+.tree-view-controller.has-controls .progress-indicator {
+  margin-right: var(--ring-unit);
+}
+
+.version-cell {
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  padding-bottom: 0;
+  align-items: center;
+  min-height: calc(var(--ring-unit) * 5);
+}
+
+.version-text {
+  font-weight: 600;
+  margin-bottom: 0;
+  font-size: var(--ring-font-size);
+}
+
+.linked-issues-list {
+  margin: 0 calc(var(--ring-unit) * 5);
+  border-radius: 0;
+  padding: calc(var(--ring-unit) * 1) 0;
+  width: calc(100% - var(--ring-unit) * 10);
+  box-sizing: border-box;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--ring-sidebar-background-color);
+}
+
+.linked-issues-list::before {
+  content: '';
+  display: block;
+  height: 1px;
+  background-color: var(--ring-line-color);
+  width: 100%;
+}
+
+.linked-issue-item {
+  display: flex;
+  align-items: center;
+  padding: calc(var(--ring-unit) * 0.5) var(--ring-unit);
+  margin-bottom: 3px;
+  border-radius: 3px;
+  cursor: pointer;
+  min-height: calc(var(--ring-unit) * 3);
+}
+
+.linked-issue-item:hover {
+  background-color: var(--ring-hover-background-color);
+}
+
+.linked-issue-id {
+  font-weight: 600;
+  margin-right: calc(var(--ring-unit) * 2);
+  color: var(--ring-link-color);
+  font-size: var(--ring-font-size);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px; /* prevent long IDs from pushing progress */
+}
+
+.linked-issue-summary {
+  color: var(--ring-text-color);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ring-font-size);
+  /* Allow grid item to shrink for ellipsis; prevents overlapping with controls */
+  min-width: 0;
+}
+
+/* Additional styling for linked issues within the version cell */
+.linked-issue-item:last-child {
+  margin-bottom: 0;
+}
+
+/* Manual Issue Management controls layout */
+.linked-issue-item .issue-controls {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--ring-unit));
+  justify-self: end; /* align the entire controls block to the end of the grid */
+}
+
+/* Discoped styling: gray text, hide progress, strikethrough id and summary */
+.linked-issue-item.discoped {
+  color: var(--ring-disabled-color, #9E9E9E);
+}
+.linked-issue-item.discoped .linked-issue-id,
+.linked-issue-item.discoped .linked-issue-summary {
+  text-decoration: line-through;
+}
+/* Explicitly override colors for id and summary in Discoped state */
+.linked-issue-item.discoped .linked-issue-id,
+.linked-issue-item.discoped .linked-issue-summary {
+  color: var(--ring-disabled-color, #9E9E9E) !important;
+}
+.linked-issue-item.discoped .progress-indicator {
+  display: none;
+}
+.linked-issue-item.discoped .tree-view-controller {
+  grid-template-columns: calc(var(--ring-unit) * 2) max-content minmax(0, 1fr) 150px;
+}
+
+/* Styles for the combined expandable content section */
+.expandable-content-section {
+  margin: 0;
+  border-radius: 0;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--ring-sidebar-background-color);
+}
+
+/* Styles for the version info section - styled like banner component */
+.version-info-section {
+  margin: calc(var(--ring-unit) * 1) calc(var(--ring-unit) * 5);
+  border-radius: var(--ring-unit);
+  padding: calc(var(--ring-unit) * 1.5);
+  width: calc(100% - var(--ring-unit) * 10);
+  box-sizing: border-box;
+  max-width: 100%;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  overflow: hidden;
+  align-items: flex-start;
+  gap: var(--ring-unit);
+
+  /* Info styling - blue theme */
+  border: 1px solid var(--ring-border-hover-color);
+  color: var(--ring-text-color);
+  line-height: var(--ring-line-height);
+}
+
+/* Icon styling */
+.info-icon {
+  color: var(--ring-main-color);
+  flex-shrink: 0;
+}
+
+/* Content container */
+.info-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* Styles for description and additional info - styled like banner description */
+.version-description,
+.version-additional-info {
+  margin-bottom: calc(var(--ring-unit) * 2);
+  padding: 0;
+}
+
+.version-description:last-child,
+.version-additional-info:last-child {
+  margin-bottom: 0;
+}
+
+.version-description h4,
+.version-additional-info h4 {
+  margin-top: 0;
+  margin-bottom: calc(var(--ring-unit));
+  font-size: var(--ring-font-size);
+  font-weight: 600;
+  color: var(--ring-text-color);
+}
+
+.version-description-content,
+.version-additional-info-content {
+  font-size: var(--ring-font-size);
+  line-height: var(--ring-line-height);
+  color: var(--ring-text-color);
+  padding: 0;
+}
+
+/* Match banner description p styling */
+.version-description-content p,
+.version-additional-info-content p {
+  margin: calc(var(--ring-unit)) 0;
+}
+
+.version-description-content p:first-child,
+.version-additional-info-content p:first-child {
+  margin-top: 0;
+}
+
+.version-description-content p:last-child,
+.version-additional-info-content p:last-child {
+  margin-bottom: 0;
+}
+
+.product-tag {
+  font-weight: bold;
+}
+
+.version-status {
+  margin-left: var(--ring-unit);
+  display: inline-flex;
+}
+
+.status-tag {
+  margin-right: 0;
+}
+
+/* Highlighted date styles */
+.highlighted-date {
+  background-color: #fff8e0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  border: 1px solid #f0d070;
+  white-space: nowrap; /* ensure date stays on one line */
+  position: relative; /* enable stacking over following cell when needed */
+  z-index: 2;
+}
+
+/* Status tag with freeze indicator */
+.status-tag-with-indicator {
+  position: relative;
+}
+
+.status-tag-with-indicator::after {
+  content: '❄';
+  position: absolute;
+  top: -4px; /* slice up a bit */
+  right: -6px; /* slice to the right a bit */
+  font-size: 12px;
+  font-weight: 700;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  color: var(--ring-main-color);
+  background-color: var(--ring-content-background-color);
+  border: 1px solid var(--ring-line-color);
+}
+
+/* Status tag with "today" indicator */
+.status-tag-with-today-indicator {
+  position: relative;
+}
+
+/* Use ::before placed same as freeze marker */
+.status-tag-with-today-indicator::before {
+  content: '!';
+  position: absolute;
+  top: -4px; /* slice up a bit */
+  right: -6px; /* slice to the right a bit */
+  font-size: 12px;
+  font-weight: 700;
+  /* Rounded square badge for better visibility */
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  color: #e56d17; /* warning-like color for light theme */
+  background-color: #fff0e8;
+  border: 1px solid #f2b181;
+}
+
+/* Filters container styling similar to simplified list controls */
+.version-list-filters {
+  display: flex;
+  gap: calc(var(--ring-unit));
+  align-items: center;
+  padding: calc(var(--ring-unit)) var(--ring-unit);
+}
+
+.version-list-filters select,
+.version-list-filters input[type='text'] {
+  height: calc(var(--ring-unit) * 3);
+  padding: 0 calc(var(--ring-unit));
+  border: 1px solid var(--ring-line-color);
+  border-radius: var(--ring-border-radius);
+  background-color: var(--ring-content-background-color);
+  color: var(--ring-text-color);
+}
+
+.version-list-filters select:focus,
+.version-list-filters input[type='text']:focus {
+  outline: none;
+  border-color: var(--ring-main-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring-main-color) 20%, transparent);
+}
+
+/* Sortable header cells styling inspired by simplified table headers */
+.version-list-header-cell.sortable {
+  cursor: pointer;
+  border-radius: var(--ring-border-radius);
+}
+
+.version-list-header-cell.sortable:hover {
+  background-color: var(--ring-hover-background-color);
+}
+
+.version-list-header-cell.sortable:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring-main-color) 20%, transparent);
+}
+
+/* Red warning info block */
+.warning-info-section {
+  /* Warning specific palette (mirrors banner approach) */
+  --ring-warning-container-light: #fff0e8;
+  --ring-orange-border: #f2b181;
+  --ring-main-warning-color: #e56d17;
+
+  margin: calc(var(--ring-unit) * 1) calc(var(--ring-unit) * 5);
+  border-radius: var(--ring-unit);
+  padding: calc(var(--ring-unit) * 1.5);
+  width: calc(100% - var(--ring-unit) * 10);
+  box-sizing: border-box;
+  max-width: 100%;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  overflow: hidden;
+  align-items: flex-start;
+  gap: var(--ring-unit);
+  
+  /* Warning styling */
+  border: 1px solid var(--ring-orange-border);
+  background-color: var(--ring-warning-container-light);
+  color: var(--ring-text-color);
+  line-height: var(--ring-line-height);
+}
+
+/* Feature freeze info block */
+.freeze-info-section {
+  margin: calc(var(--ring-unit) * 1) calc(var(--ring-unit) * 5);
+  border-radius: var(--ring-unit);
+  padding: calc(var(--ring-unit) * 1.5);
+  width: calc(100% - var(--ring-unit) * 10);
+  box-sizing: border-box;
+  max-width: 100%;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  overflow: hidden;
+  align-items: flex-start;
+  gap: var(--ring-unit);
+  
+  /* Info styling - blue theme */
+  border: 1px solid var(--ring-border-hover-color);
+  color: var(--ring-text-color);
+  line-height: var(--ring-line-height);
+}
+
+/* Styles for freeze content */
+.version-freeze h4,
+.version-warning h4 {
+  margin-top: 0;
+  margin-bottom: calc(var(--ring-unit));
+  font-size: var(--ring-font-size);
+  font-weight: 600;
+  color: var(--ring-text-color);
+}
+
+.version-freeze-content,
+.version-warning-content {
+  white-space: pre-wrap;
+  font-size: var(--ring-font-size);
+  line-height: var(--ring-line-height);
+  color: var(--ring-text-color);
+  padding: 0;
+}
+
+.version-description-content a,
+.version-additional-info-content a {
+  color: var(--ring-link-color);
+  text-decoration: underline;
+}
+
+.version-description-content a:hover,
+.version-additional-info-content a:hover {
+  color: var(--ring-link-hover-color);
+}
+
+.version-description-content ul,
+.version-description-content ol,
+.version-additional-info-content ul,
+.version-additional-info-content ol {
+  margin: calc(var(--ring-unit)) 0;
+  padding-left: calc(var(--ring-unit) * 2);
+  color: var(--ring-text-color);
+}
+
+
+/* Dark theme overrides for warning info section */
+html[style*="color-scheme: dark"] .warning-info-section,
+.yt-dark-theme .warning-info-section {
+  --ring-warning-container-light: #352a27;
+  --ring-orange-border: #825845;
+  --ring-main-warning-color: #d48b5f;
+}
+
+/* Icon color inside warning info section */
+.warning-info-section .info-icon {
+  color: var(--ring-main-warning-color);
+}
+
+/* Dark theme overrides for highlighted date */
+html[style*="color-scheme: dark"] .highlighted-date,
+.yt-dark-theme .highlighted-date {
+  background-color: #3a2f15;
+  border-color: #806a2a;
+  color: #f3dc8e;
+}
+
+
+/* Dark theme styles for status markers */
+html[style*="color-scheme: dark"] .status-tag-with-today-indicator::before,
+.yt-dark-theme .status-tag-with-today-indicator::before {
+  color: #d48b5f; /* warning color matches dark warning section */
+  background-color: #352a27;
+  border-color: #825845;
+}
+
+html[style*="color-scheme: dark"] .status-tag-with-indicator::after,
+.yt-dark-theme .status-tag-with-indicator::after {
+  color: var(--ring-main-color);
+  background-color: var(--ring-sidebar-background-color);
+  border-color: var(--ring-border-hover-color);
+}

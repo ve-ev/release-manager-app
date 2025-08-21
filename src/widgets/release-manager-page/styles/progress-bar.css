@@ -1,0 +1,205 @@
+/* Progress Bar Styles */
+.progress-bar-container {
+  display: flex;
+  flex-direction: row-reverse; /* text on the same line as the bar */
+  align-items: center;
+  gap: var(--ring-unit);
+  width: auto;
+  max-width: none;
+  margin: 0 0 0 var(--ring-unit); /* add left gap before the bar to avoid overlap with summary */
+  flex-shrink: 0; /* prevent bar container from shrinking and hiding the dot */
+}
+
+.progress-bar {
+  height: 8px;
+  width: 140px; /* fixed bar width for consistent inline layout */
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.progress-segment {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.progress-segment-green {
+  background-color: #4CAF50;
+}
+
+.progress-segment-yellow {
+  background-color: #FFC107;
+}
+
+.progress-segment-red {
+  background-color: #F44336;
+}
+
+.progress-segment-grey {
+  background-color: #9E9E9E;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #757575;
+  white-space: nowrap; /* keep text on one line */
+  overflow: hidden; /* prevent overflow into neighbors */
+  text-overflow: ellipsis; /* show ellipsis when too long */
+}
+
+/* Progress Dot Styles */
+.progress-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 auto; /* ensure the dot never shrinks in flex layout */
+  box-sizing: border-box; /* keep size consistent when border is applied (blueprint meta dot) */
+}
+
+.progress-dot-green {
+  background-color: #4CAF50;
+}
+
+.progress-dot-yellow {
+  background-color: #FFC107;
+}
+
+.progress-dot-red {
+  background-color: #F44336;
+}
+
+.progress-dot-grey {
+  background-color: #9E9E9E;
+}
+
+/* Specific styles for linked-issue-item */
+.linked-issue-item .progress-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end; /* align with end of row */
+  gap: var(--ring-unit);
+  margin-left: var(--ring-unit);
+  min-width: 140px; /* space to accommodate bar + text */
+  max-width: none;
+  justify-self: end; /* when inside grid align to the end */
+  flex-wrap: nowrap; /* keep bar, text, and dot on one line */
+}
+
+/* Specific styles for version-item-header */
+.version-list-cell.progress-cell {
+  width: 200px;
+  flex-shrink: 0; /* keep fixed width like actions-cell */
+  display: flex;
+  align-items: center;
+  justify-content: flex-start; /* align with header and other cells */
+}
+
+/* Ensure header cell for Progress aligns and sizes like other headers/columns */
+.version-list-header-cell.progress-cell {
+  width: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start; /* match other headers alignment */
+}
+
+/* Fix for progress bar in version-list-row */
+.version-list-row .progress-bar-container {
+  width: auto;
+  max-width: none;
+  margin: 0 0 0 var(--ring-unit); /* ensure left gap inside rows as well */
+}
+
+/* Hide counters text specifically for the header row progress bar */
+.version-list-row .progress-bar-container.no-counters .progress-text {
+  display: none;
+}
+
+/* Style for when there are no linked issues */
+.no-progress {
+  color: #757575;
+  font-size: 12px;
+  text-align: center;
+  padding: 4px 0;
+}
+
+/* In linked issues list, show counters text with truncation to avoid cropping */
+.linked-issue-item .progress-bar-container {
+  flex-shrink: 1; /* allow container to shrink within controls area */
+  max-width: none;
+}
+.linked-issue-item .progress-bar-container .progress-text {
+  display: inline-block;
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Skeleton placeholder to prevent layout jumping while loading */
+.progress-placeholder {
+  display: flex;
+  align-items: center;
+  gap: var(--ring-unit);
+}
+.progress-placeholder-bar {
+  height: 8px;
+  width: 140px; /* match .progress-bar */
+  background: #eee;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* simple shimmer */
+@keyframes progressShimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.progress-placeholder-bar::after,
+.progress-placeholder-text::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 50%;
+  background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.6), rgba(255,255,255,0));
+  animation: progressShimmer 1.2s infinite;
+}
+/* Dot placeholder keeps space reserved */
+.progress-placeholder-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #eee;
+  flex: 0 0 auto;
+}
+
+/* Issue controls placeholders */
+.issue-controls-placeholder {
+  display: flex;
+  align-items: center;
+  gap: var(--ring-unit);
+}
+.tag-placeholder {
+  height: 18px;
+  width: 90px;
+  background: #eee;
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+.tag-placeholder.small { width: 80px; }
+.tag-placeholder::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 50%;
+  background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.6), rgba(255,255,255,0));
+  animation: progressShimmer 1.2s infinite;
+}

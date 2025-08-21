@@ -1,0 +1,23 @@
+{
+  "name": "release-manager",
+  "title": "Release Manager",
+  "description": "",
+  "$schema": "https://json.schemastore.org/youtrack-app.json",
+  "version": "1.0.2",
+  "vendor": {
+    "name": "JetBrains",
+    "url": "https://www.jetbrains.com"
+  },
+  "icon": "icon.svg",
+  "widgets": [
+    {
+      "key": "releases",
+      "name": "Release Manager",
+      "indexPath": "release-manager-page/index.html",
+      "extensionPoint": "PROJECT_SETTINGS",
+      "iconPath": "release-manager-page/widget-icon.svg",
+      "description": "",
+      "permissions": []
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Release Manager Settings",
+  "description": "App settings stored per project",
+  "properties": {
+    "releaseManagers" : {
+      "title": "Release managers",
+      "description": "Administration role",
+      "type": "array",
+      "items": {
+        "x-entity": "UserGroup",
+        "type": "object"
+      }
+    },
+    "lightManagers" : {
+      "title": "Light Release Managers",
+      "description": "User role with option to edit already existing release versions",
+      "type": "array",
+      "items": {
+        "x-entity": "UserGroup",
+        "type": "object"
+      }
+    },
+    "manualIssueManagement" : {
+      "title": "Manual Issue Management Feature",
+      "type": "boolean"
+    },
+    "metaIssuesEnabled" : {
+      "title": "Allow to create meta-issue for showing in release version",
+      "type": "boolean"
+    }
+  },
+  "required": ["releaseManagers"]
+}

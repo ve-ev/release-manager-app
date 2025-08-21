@@ -1,0 +1,19 @@
+<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="borderGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0" stop-color="#FA42EB" />
+      <stop offset="1" stop-color="#FA407E" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect x="10" y="10" width="100" height="100" rx="20" fill="white" stroke="url(#borderGradient)" stroke-width="8" />
+
+  <!-- Progress-bars -->
+  <rect x="28" y="28" width="64" height="8" rx="3" fill="#A8AEEB" />
+  <rect x="28" y="40" width="48" height="8" rx="3" fill="#A8AEEB" />
+  <rect x="28" y="52" width="10" height="8" rx="3" fill="#A8AEEB" />
+
+  <!-- Checkmark -->
+  <path d="M40 70 L58 90 L82 54" stroke="url(#borderGradient)" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
