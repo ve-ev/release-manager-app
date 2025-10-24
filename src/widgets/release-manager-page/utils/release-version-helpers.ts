@@ -1,7 +1,6 @@
-import {ReleaseVersion} from '../interfaces';
-import {isToday, isExpired} from '../utils/date-utils.tsx';
-import {ReleaseStatus} from '../utils/status-utils.tsx';
-import {StatusInfo} from '../interfaces';
+import {ReleaseVersion, StatusInfo, ContentVisibility, DateHighlighting} from '../interfaces';
+import {isToday, isExpired} from './date-utils';
+import {ReleaseStatus} from './helpers';
 
 /**
  * Check if freeze indicator should be shown
@@ -79,7 +78,6 @@ export function getStatusInfo(item: ReleaseVersion): StatusInfo {
  * @param item - The release version item
  * @returns Content visibility flags
  */
-import {ContentVisibility} from '../interfaces';
 export function getContentVisibility(item: ReleaseVersion): ContentVisibility {
   const plannedIssues = item.plannedIssues || [];
   const hasPlannedIssues = plannedIssues.length > 0;
@@ -141,7 +139,6 @@ function getFeatureFreezeDateClassName(
  * @param item - The release version item
  * @returns Date highlighting class names
  */
-import {DateHighlighting} from '../interfaces';
 export function getDateHighlighting(item: ReleaseVersion): DateHighlighting {
   const isReleaseDateToday = isToday(item.releaseDate);
   const isReleaseDateExpired = isExpired(item.releaseDate);
@@ -159,3 +156,4 @@ export function getDateHighlighting(item: ReleaseVersion): DateHighlighting {
     )
   };
 }
+

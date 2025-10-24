@@ -1,9 +1,11 @@
-import React from 'react';
-import {ReleaseVersion} from '../../interfaces';
+import React, {useMemo, useCallback} from 'react';
+import {ReleaseVersion, AppSettings} from '../../interfaces';
 import {HostAPI} from '../../../../../@types/globals';
 import {api} from '../../app';
-import {isExpired} from '../../utils/date-utils.tsx';
+import {isExpired} from '../../utils/date-utils';
 import '../../styles/version-table.css';
+import {useIssueStatuses} from '../../hooks';
+import {STATUS_POLL_INTERVAL_MS} from '../../utils/constants';
 /* eslint-disable complexity */
 
 // Import helper functions
@@ -11,11 +13,11 @@ import {
   getStatusInfo,
   getContentVisibility,
   getDateHighlighting
-} from '../../helper/release-version-helpers.tsx';
+} from '../../utils/release-version-helpers';
 
 // Import UI components
-import {VersionItemHeader} from './version-item-header.tsx';
-import {ExpandableContent} from './release-version-sections.tsx';
+import {VersionItemHeader} from './version-item-header';
+import {ExpandableContent} from './release-version-sections';
 
 // Props interface for ReleaseVersionItem
 export interface ReleaseVersionItemProps {
@@ -35,6 +37,10 @@ export interface ReleaseVersionItemProps {
   metaIssuesEnabled?: boolean;
   handleAddMetaIssue?: (releaseVersion: ReleaseVersion) => void;
   handleGenerateReleaseNotes?: (releaseVersion: ReleaseVersion) => void;
+  /** App settings (passed from top to avoid hook proliferation) */
+  settings?: AppSettings;
+  /** Progress settings (passed from top to avoid hook proliferation) */
+  progressSettings?: AppSettings;
 }
 
 /**
@@ -59,26 +65,43 @@ const ReleaseVersionItemComponent: React.FC<ReleaseVersionItemProps> = ({
   manualIssueManagement,
   metaIssuesEnabled,
   handleAddMetaIssue,
-  handleGenerateReleaseNotes
+  handleGenerateReleaseNotes,
+  settings,
+  progressSettings
 }) => {
-  // Get normalized base URL from API
-  const normalizedBaseUrl = api.getBaseUrl();
+  // CENTRALIZED hook instance - called ONCE per ReleaseVersionItem
+  // This prevents state fragmentation between VersionItemHeader and PlannedIssuesList
+  const {
+    issueStatusMap,
+    issueTestStatusMap,
+    statusesLoaded,
+    setIssueStatus,
+    setTestStatus
+  } = useIssueStatuses(
+    api,
+    item.plannedIssues || [],
+    manualIssueManagement,
+    STATUS_POLL_INTERVAL_MS
+  );
+
+  // Memoize expensive computations
+  const normalizedBaseUrl = useMemo(() => api.getBaseUrl(), []); // Base URL doesn't change
+  
+  // Memoize status info calculation (involves multiple Date object creations)
+  const statusInfo = useMemo(() => getStatusInfo(item), [item]);
+  
+  // Memoize content visibility calculation
+  const contentVisibility = useMemo(() => getContentVisibility(item), [item]);
+  
+  // Memoize date highlighting calculation (involves Date object creations)
+  const dateHighlighting = useMemo(() => getDateHighlighting(item), [item]);
+  
+  // Memoize expensive date check
+  const isReleaseDateExpired = useMemo(() => isExpired(item.releaseDate), [item.releaseDate]);
   
   // Check if any expandable content section is showing
   const isAnyContentSectionShowing = isExpanded || isInfoExpanded;
   const isClosed = !isAnyContentSectionShowing;
-
-  // Get status information
-  const statusInfo = getStatusInfo(item);
-  
-  // Get content visibility flags
-  const contentVisibility = getContentVisibility(item);
-  
-  // Get date highlighting class names
-  const dateHighlighting = getDateHighlighting(item);
-  
-  // Check if release date is expired (for overdue warning)
-  const isReleaseDateExpired = isExpired(item.releaseDate);
 
   // Check if section should be collapsible
   const isCollapsible = contentVisibility.hasPlannedIssues || 
@@ -86,8 +109,8 @@ const ReleaseVersionItemComponent: React.FC<ReleaseVersionItemProps> = ({
                         statusInfo.showFreezeNotice || 
                         !contentVisibility.hasInfoToShow;
   
-  // Handle expand/collapse click for the expandable content section
-  const handleExpandClick = (e?: React.MouseEvent) => {
+  // Memoize event handlers
+  const handleExpandClick = useCallback((e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
     }
@@ -103,12 +126,12 @@ const ReleaseVersionItemComponent: React.FC<ReleaseVersionItemProps> = ({
       // When expanding or collapsing, toggle the section
       toggleExpandReleaseVersion(item.id);
     }
-  };
+  }, [isAnyContentSectionShowing, toggleInfoSection, item.id, isCollapsible, isExpanded, toggleExpandReleaseVersion]);
   
   // Handle double-click - same as single click for simplicity
-  const handleDoubleClick = () => {
+  const handleDoubleClick = useCallback(() => {
     handleExpandClick();
-  };
+  }, [handleExpandClick]);
     
   return (
     <div id={item.id} className="version-list-item">
@@ -133,6 +156,8 @@ const ReleaseVersionItemComponent: React.FC<ReleaseVersionItemProps> = ({
         metaIssuesEnabled={metaIssuesEnabled}
         handleAddMetaIssue={handleAddMetaIssue}
         handleGenerateReleaseNotes={handleGenerateReleaseNotes}
+        progressSettings={progressSettings}
+        issueStatusMap={issueStatusMap}
       />
 
       {/* Expandable content section */}
@@ -147,6 +172,12 @@ const ReleaseVersionItemComponent: React.FC<ReleaseVersionItemProps> = ({
         baseUrl={normalizedBaseUrl}
         manualIssueManagement={manualIssueManagement}
         canManage={!!canEdit}
+        progressSettings={progressSettings}
+        issueStatusMap={issueStatusMap}
+        issueTestStatusMap={issueTestStatusMap}
+        statusesLoaded={statusesLoaded}
+        setIssueStatus={setIssueStatus}
+        setTestStatus={setTestStatus}
       />
     </div>
   );
@@ -160,7 +191,18 @@ export const ReleaseVersionItem = React.memo(ReleaseVersionItemComponent, (prev,
   prev.showProgressColumn === next.showProgressColumn &&
   prev.canEdit === next.canEdit &&
   prev.canDelete === next.canDelete &&
-  prev.manualIssueManagement === next.manualIssueManagement
+  prev.manualIssueManagement === next.manualIssueManagement &&
+  prev.metaIssuesEnabled === next.metaIssuesEnabled &&
+  // Compare object references for settings (already memoized at app level)
+  prev.settings === next.settings &&
+  prev.progressSettings === next.progressSettings &&
+  // Function props - these are stable from parent (useCallback)
+  prev.toggleExpandReleaseVersion === next.toggleExpandReleaseVersion &&
+  prev.toggleInfoSection === next.toggleInfoSection &&
+  prev.handleEditReleaseVersion === next.handleEditReleaseVersion &&
+  prev.handleConfirmDelete === next.handleConfirmDelete &&
+  prev.handleAddMetaIssue === next.handleAddMetaIssue &&
+  prev.handleGenerateReleaseNotes === next.handleGenerateReleaseNotes
 ));
 
 ReleaseVersionItem.displayName = 'ReleaseVersionItem';

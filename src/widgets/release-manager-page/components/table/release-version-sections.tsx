@@ -1,6 +1,10 @@
 import React from 'react';
-import { renderOverdueWarning, renderFreezeNotice, renderVersionInfo, renderPlannedIssues } from '../../helper/release-version-section-helpers.tsx'
-import { isExpired } from '../../utils/date-utils.tsx'
+import {OverdueWarning} from './sections/overdue-warning';
+import {FreezeNotice} from './sections/freeze-notice';
+import {VersionInfo} from './sections/version-info';
+import {PlannedIssuesList} from './linked-issues/linked-issues-list';
+import {isExpired} from '../../utils/date-utils';
+import {AppSettings} from '../../interfaces';
 
 
 /**
@@ -41,7 +45,16 @@ interface ExpandableContentProps {
 /**
  * Component for the expandable content section
  */
-export const ExpandableContent: React.FC<ExpandableContentProps & { manualIssueManagement?: boolean; canManage?: boolean }> = ({
+export const ExpandableContent: React.FC<ExpandableContentProps & { 
+  manualIssueManagement?: boolean; 
+  canManage?: boolean; 
+  progressSettings?: AppSettings;
+  issueStatusMap: Record<string, import('../../hooks/useIssueStatuses').IssueStatus>;
+  issueTestStatusMap: Record<string, import('../../hooks/useIssueStatuses').TestStatus>;
+  statusesLoaded: boolean;
+  setIssueStatus: (id: string, status: import('../../hooks/useIssueStatuses').IssueStatus) => void;
+  setTestStatus: (id: string, status: import('../../hooks/useIssueStatuses').TestStatus) => void;
+}> = ({
   isAnyContentSectionShowing,
   showOverdueStatus,
   showFreezeNotice,
@@ -51,7 +64,13 @@ export const ExpandableContent: React.FC<ExpandableContentProps & { manualIssueM
   isReleaseDateExpired,
   baseUrl,
   manualIssueManagement,
-  canManage
+  canManage,
+  progressSettings,
+  issueStatusMap,
+  issueTestStatusMap,
+  statusesLoaded,
+  setIssueStatus,
+  setTestStatus
 }) => {
   if (!isAnyContentSectionShowing) {
     return null;
@@ -63,10 +82,40 @@ export const ExpandableContent: React.FC<ExpandableContentProps & { manualIssueM
 
   return (
     <div className="expandable-content-section">
-      {renderOverdueWarning(showOverdueStatus, item.version, item.releaseDate, isReleaseDateExpired)}
-      {renderFreezeNotice(showFreezeNotice, item.version, isFreezeExpired, item.featureFreezeDate)}
-      {renderVersionInfo(hasInfoToShow, item.description, item.additionalInfo)}
-      {renderPlannedIssues(hasPlannedIssues, item.plannedIssues, baseUrl, manualIssueManagement, canManage)}
+      {showOverdueStatus && (
+        <OverdueWarning
+          version={item.version}
+          releaseDate={item.releaseDate}
+          isReleaseDateExpired={isReleaseDateExpired}
+        />
+      )}
+      {showFreezeNotice && (
+        <FreezeNotice
+          version={item.version}
+          isExpired={isFreezeExpired}
+          freezeDate={item.featureFreezeDate}
+        />
+      )}
+      {hasInfoToShow && (
+        <VersionInfo
+          description={item.description}
+          additionalInfo={item.additionalInfo}
+        />
+      )}
+      {hasPlannedIssues && item.plannedIssues && (
+        <PlannedIssuesList
+            issues={item.plannedIssues}
+            baseUrl={baseUrl}
+            manualIssueManagement={!!manualIssueManagement}
+            canManage={!!canManage}
+            progressSettings={progressSettings}
+            issueStatusMap={issueStatusMap}
+            issueTestStatusMap={issueTestStatusMap}
+            statusesLoaded={statusesLoaded}
+            setIssueStatus={setIssueStatus}
+            setTestStatus={setTestStatus}
+          />
+      )}
 
       {/* Empty placeholder when no content */}
       {!hasAnyContent && <div style={{ minHeight: 'var(--ring-unit)' }}/>}    

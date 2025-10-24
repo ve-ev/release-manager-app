@@ -1,4 +1,42 @@
-import {ReleaseStatus} from '../utils/status-utils';
+/**
+ * Type definitions for the Release Manager application
+ */
+import {ReleaseStatus} from '../utils/helpers';
+
+/**
+ * ========================================
+ * Application Settings
+ * ========================================
+ */
+
+export interface AppSettings {
+  customFieldNames: string[];
+  greenZoneValues: string[];
+  yellowZoneValues: string[];
+  redZoneValues: string[];
+  greenColor?: string;
+  yellowColor?: string;
+  redColor?: string;
+  greyColor?: string;
+  products?: Array<{ id: string; name: string; color?: string }>
+}
+
+/**
+ * ========================================
+ * Permissions
+ * ========================================
+ */
+
+export interface Permissions {
+  isManager: boolean;
+  isLightManager: boolean;
+}
+
+/**
+ * ========================================
+ * Release Version & Issues
+ * ========================================
+ */
 
 export interface PlannedOrMetaIssue {
   id: string;
@@ -30,6 +68,12 @@ export interface ReleaseVersion {
   additionalInfo?: string;
 }
 
+/**
+ * ========================================
+ * UI State Interfaces
+ * ========================================
+ */
+
 export interface StatusInfo {
   displayStatus: ReleaseStatus;
   showFreezeIndicator: boolean;
@@ -49,3 +93,4 @@ export interface DateHighlighting {
   releaseDateClassName: string;
   featureFreezeDateClassName: string;
 }
+

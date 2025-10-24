@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useCallback} from 'react';
 import Input from '@jetbrains/ring-ui-built/components/input/input';
 import {Col, Row} from '@jetbrains/ring-ui-built/components/grid/grid';
 import DatePicker from '@jetbrains/ring-ui-built/components/date-picker/date-picker';
@@ -6,6 +6,8 @@ import {Size} from '@jetbrains/ring-ui-built/components/input/input';
 import Select, {SelectItem} from '@jetbrains/ring-ui-built/components/select/select';
 import {ReleaseVersion} from '../../../interfaces';
 import {api} from '../../../app.tsx';
+import {useProductOptions} from '../../../hooks/useProductOptions';
+import {RELEASE_STATUS_OPTIONS} from '../../../utils/constants';
 
 // Import CSS classes
 const styles = {
@@ -30,29 +32,11 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
   versionError,
   releaseDateError
 }) => {
-  const [productOptions, setProductOptions] = useState<Array<{key: string, label: string}>>([]);
-
-  // Fetch products from settings
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const settings = await api.getAppSettings();
-        const options = (settings.products || []).map(p => ({ key: p.name, label: p.name }));
-        setProductOptions(options);
-      } catch {
-        // keep options empty on error
-      }
-    };
-
-    fetchProducts();
-
-    const onSettingsUpdated = () => fetchProducts();
-    window.addEventListener('settings-updated', onSettingsUpdated as EventListener);
-    return () => window.removeEventListener('settings-updated', onSettingsUpdated as EventListener);
-  }, []);
+  // Use custom hook to fetch and manage product options
+  const productOptions = useProductOptions(api);
 
   // Handle product selection
-  const handleProductSelect = (selected: SelectItem<{key: string, label: string}> | null) => {
+  const handleProductSelect = useCallback((selected: SelectItem<{key: string, label: string}> | null) => {
     if (selected) {
       // Create a synthetic event to match the handleInputChange signature
       const syntheticEvent = {
@@ -74,19 +58,10 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
 
       handleInputChange(syntheticEvent);
     }
-  };
-  
-  // Status options
-  const statusOptions = [
-    { key: 'Planning', label: 'Planning' },
-    { key: 'In progress', label: 'In progress' },
-    { key: 'Released', label: 'Released' },
-    { key: 'Overdue', label: 'Overdue' },
-    { key: 'Canceled', label: 'Canceled' }
-  ];
+  }, [handleInputChange]);
   
   // Handle status selection
-  const handleStatusSelect = (selected: SelectItem<{key: string, label: string}> | null) => {
+  const handleStatusSelect = useCallback((selected: SelectItem<{key: string, label: string}> | null) => {
     if (selected) {
       // Create a synthetic event to match the handleInputChange signature
       const syntheticEvent = {
@@ -108,7 +83,7 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
 
       handleInputChange(syntheticEvent);
     }
-  };
+  }, [handleInputChange]);
 
   return (
     <>
@@ -168,8 +143,8 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
           <div>
             <Select
               selectedLabel="Status"
-              data={statusOptions}
-              selected={statusOptions.find(option => option.key === formData.status)}
+              data={RELEASE_STATUS_OPTIONS as unknown as Array<{key: string, label: string}>}
+              selected={RELEASE_STATUS_OPTIONS.find(option => option.key === formData.status)}
               onSelect={handleStatusSelect}
             />
           </div>
