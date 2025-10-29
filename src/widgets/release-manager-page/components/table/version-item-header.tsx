@@ -123,8 +123,6 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
         window.dispatchEvent(new CustomEvent('release-version-status-updated', {
           detail: { id: item.id, status: newStatus }
         }));
-        // Keep legacy event for backward compatibility
-        window.dispatchEvent(new Event('release-versions-updated'));
       })
       .catch((error: unknown) => {
         console.error('Failed to update status', error);
@@ -135,7 +133,10 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
   const handleConfirmFreeze = useCallback(() => {
     api.updateReleaseVersion({ ...item, freezeConfirmed: true })
       .then(() => {
-        window.dispatchEvent(new Event('release-versions-updated'));
+        // Dispatch targeted update to avoid full table refresh
+        window.dispatchEvent(new CustomEvent('release-version-status-updated', {
+          detail: { id: item.id, status: item.status, freezeConfirmed: true }
+        }));
       })
       .catch((error: unknown) => {
         console.error('Failed to confirm freeze', error);

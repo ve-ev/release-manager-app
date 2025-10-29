@@ -22,6 +22,7 @@ export function useReleaseVersions(api: API) {
       setError(null);
     } catch (err) {
       setError('Failed to load release versions');
+      // eslint-disable-next-line no-console
       console.error(err);
     } finally {
       setLoading(false);
@@ -34,6 +35,7 @@ export function useReleaseVersions(api: API) {
       const result = await api.getReleaseVersions();
       setReleaseVersions(prev => reconcileReleaseVersions(prev, result));
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error(err);
     }
   }, [api]);
@@ -51,11 +53,16 @@ export function useReleaseVersions(api: API) {
 
     // Targeted status update handler
     const targetedHandler = ((e: Event) => {
-      const ce = e as CustomEvent<{ id: string | number; status: ReleaseStatus }>;
+      const ce = e as CustomEvent<{ id: string | number; status: ReleaseStatus; freezeConfirmed?: boolean }>;
       const detail = ce?.detail;
       if (!detail) { return; }
-      setReleaseVersions(prev => prev.map(rv => 
-        (rv.id === detail.id ? { ...rv, status: detail.status } : rv)
+      setReleaseVersions(prev => prev.map(rv =>
+        (rv.id === detail.id ? {
+          ...rv,
+          status: detail.status,
+          // Update freezeConfirmed if it's included in the event
+          ...(detail.freezeConfirmed !== undefined ? { freezeConfirmed: detail.freezeConfirmed } : {})
+        } : rv)
       ));
     }) as EventListener;
     window.addEventListener('release-version-status-updated', targetedHandler);
@@ -81,4 +88,3 @@ export function useReleaseVersions(api: API) {
     refetch: fetchReleaseVersions
   };
 }
-
