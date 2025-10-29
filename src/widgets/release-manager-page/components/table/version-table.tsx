@@ -1,5 +1,5 @@
 import React, {memo, useState, useCallback, useMemo} from 'react';
-import {ReleaseVersion} from '../../interfaces';
+import {ReleaseVersion, AppSettings} from '../../interfaces';
 import {HostAPI} from '../../../../../@types/globals';
 import {ReleaseVersionItem} from './release-version-item.tsx';
 import {TableHeader, LoadingState, ErrorState} from './table-components.tsx';
@@ -40,6 +40,10 @@ interface ReleaseTableProps {
   /** Handler to open meta-issue form */
   handleAddMetaIssue?: (releaseVersion: ReleaseVersion) => void;
   handleGenerateReleaseNotes?: (releaseVersion: ReleaseVersion) => void;
+  /** App settings (passed from top to avoid hook proliferation) */
+  settings?: AppSettings;
+  /** Progress settings (passed from top to avoid hook proliferation) */
+  progressSettings?: AppSettings;
 }
 
 /**
@@ -61,7 +65,9 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
   manualIssueManagement,
   metaIssuesEnabled,
   handleAddMetaIssue,
-  handleGenerateReleaseNotes
+  handleGenerateReleaseNotes,
+  settings,
+  progressSettings
 }) => {
   /** Set of IDs for release versions with expanded info sections */
   const [expandedInfoSections, setExpandedInfoSections] = useState<Set<string | number>>(new Set());
@@ -117,14 +123,31 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
   /** Apply filters and sorting, then render items */
   const releaseVersionItems = useMemo(() => {
     const norm = (v?: string) => (v || '').toLowerCase();
+    
+    // Pre-normalize filter values once
+    const normProductFilter = norm(productFilter);
+    const normStatusFilter = norm(statusFilter);
+    const normVersionFilter = norm(versionFilter);
 
-    const filtered = releaseVersions.filter(item => !!item.id)
-      .filter(item => !productFilter || norm(item.product) === norm(productFilter))
-      .filter(item => !statusFilter || norm(item.status) === norm(statusFilter))
-      .filter(item => !versionFilter || norm(item.version).includes(norm(versionFilter)));
+    // Single-pass filtering (instead of 4 separate iterations)
+    const filtered = releaseVersions.filter(item => {
+      if (!item.id) return false;
+      if (normProductFilter && norm(item.product) !== normProductFilter) return false;
+      if (normStatusFilter && norm(item.status) !== normStatusFilter) return false;
+      if (normVersionFilter && !norm(item.version).includes(normVersionFilter)) return false;
+      return true;
+    });
 
     const cmpStr = (a?: string, b?: string) => (a || '').localeCompare(b || '', undefined, { numeric: true, sensitivity: 'base' });
-    const getTime = (d?: string) => (d ? new Date(d).getTime() : 0);
+    
+    // Pre-compute date timestamps ONCE for all items (instead of creating Date objects repeatedly during sort)
+    const releaseDates = new Map<string | number, number>();
+    const freezeDates = new Map<string | number, number>();
+    filtered.forEach(item => {
+      if (item.releaseDate) releaseDates.set(item.id, new Date(item.releaseDate).getTime());
+      if (item.featureFreezeDate) freezeDates.set(item.id, new Date(item.featureFreezeDate).getTime());
+    });
+    const getTime = (id: string | number, map: Map<string | number, number>) => map.get(id) || 0;
 
     const statusOrder = ['Planning', 'In progress', 'Overdue', 'Released', 'Canceled'];
     const statusRank = (s?: string) => {
@@ -148,12 +171,12 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
         case 'status':
           base = statusRank(a.status) - statusRank(b.status); break;
         case 'featureFreezeDate':
-          base = getTime(a.featureFreezeDate) - getTime(b.featureFreezeDate); break;
+          base = getTime(a.id, freezeDates) - getTime(b.id, freezeDates); break;
         case 'progress':
           base = progressValue(a) - progressValue(b); break;
         case 'releaseDate':
         default:
-          base = getTime(a.releaseDate) - getTime(b.releaseDate); break;
+          base = getTime(a.id, releaseDates) - getTime(b.id, releaseDates); break;
       }
       return sortDirection === 'asc' ? base : -base;
     });
@@ -177,6 +200,8 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
         metaIssuesEnabled={metaIssuesEnabled}
         handleAddMetaIssue={handleAddMetaIssue}
         handleGenerateReleaseNotes={handleGenerateReleaseNotes}
+        settings={settings}
+        progressSettings={progressSettings}
       />
     ));
   }, [
@@ -197,7 +222,12 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
     host,
     canEdit,
     canDelete,
-    handleGenerateReleaseNotes
+    manualIssueManagement,
+    metaIssuesEnabled,
+    handleAddMetaIssue,
+    handleGenerateReleaseNotes,
+    settings,
+    progressSettings
   ]);
 
   if (loading) {

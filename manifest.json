@@ -3,7 +3,7 @@
   "title": "Release Manager",
   "description": "Plan, track, and communicate product releases with version management, progress tracking, and release notes generation.",
   "$schema": "https://json.schemastore.org/youtrack-app.json",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "vendor": {
     "name": "E.V",
     "url": "https://github.com/ve-ev/release-manager-app"

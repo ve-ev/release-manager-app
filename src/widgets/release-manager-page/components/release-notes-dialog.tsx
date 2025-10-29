@@ -1,9 +1,10 @@
-import React, {useState} from 'react';
+import React, {useState, useCallback} from 'react';
 import Panel from '@jetbrains/ring-ui-built/components/panel/panel';
 import Button from '@jetbrains/ring-ui-built/components/button/button';
 import Icon from '@jetbrains/ring-ui-built/components/icon/icon';
 import copyIcon from '@jetbrains/icons/copy';
 import '../styles/release-notes-dialog.css';
+import {COPY_RESET_MS} from '../utils/constants';
 
 interface ReleaseNotesDialogProps {
   open: boolean;
@@ -12,12 +13,9 @@ interface ReleaseNotesDialogProps {
 }
 
 export const ReleaseNotesDialog: React.FC<ReleaseNotesDialogProps> = ({ open, notes, onClose }) => {
-  const COPY_RESET_MS = 1500;
   const [copied, setCopied] = useState(false);
 
-  if (!open) { return null; }
-
-  const handleCopy = async () => {
+  const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(notes || '');
       setCopied(true);
@@ -37,7 +35,9 @@ export const ReleaseNotesDialog: React.FC<ReleaseNotesDialogProps> = ({ open, no
         // ignore
       }
     }
-  };
+  }, [notes]);
+
+  if (!open) { return null; }
 
   return (
     <div className="release-notes-overlay" role="dialog" aria-modal="true" data-test="release-notes-dialog">

@@ -161,6 +161,43 @@ exports.httpHandler = {
             }
         },
         {
+            method: 'POST',
+            path: 'issues-batch',
+            permissions: ['READ_ISSUE'],
+            handle: function handle(ctx) {
+                try {
+                    const payload = ctx.request.json();
+                    const issueIds = payload.issueIds || [];
+
+                    if (!Array.isArray(issueIds) || issueIds.length === 0) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue IDs array is required');
+                        return;
+                    }
+
+                    // Fetch all issues and return results with found/not found status
+                    const results = issueIds.map(function(issueId) {
+                        const foundIssue = entities.Issue.findById(issueId);
+                        if (foundIssue) {
+                            return {
+                                found: true,
+                                issue: prepareIssueData(foundIssue)
+                            };
+                        } else {
+                            return {
+                                found: false,
+                                issueId: issueId
+                            };
+                        }
+                    });
+
+                    ctx.response.json(results);
+                } catch (error) {
+                    logError('Failed to get issues batch', error);
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
+                }
+            }
+        },
+        {
             method: 'GET',
             path: 'issue-field',
             permissions: ['READ_ISSUE'],
@@ -277,6 +314,78 @@ exports.httpHandler = {
                     ctx.response.json({ parentIssueId: issueId, fieldName: selectedActualName || fieldName, items: items });
                 } catch (error) {
                     logError('Failed to get issue field bulk', error);
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
+                }
+            }
+        },
+        {
+            method: 'POST',
+            path: 'issue-field-bulk-batch',
+            permissions: ['READ_ISSUE'],
+            handle: function handle(ctx) {
+                try {
+                    const payload = ctx.request.json();
+                    const issueIds = payload.issueIds || [];
+                    const fieldNames = payload.fieldNames || [];
+
+                    if (!Array.isArray(issueIds) || issueIds.length === 0) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue IDs array is required');
+                        return;
+                    }
+                    if (!Array.isArray(fieldNames) || fieldNames.length === 0) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field names array is required');
+                        return;
+                    }
+
+                    // Result structure: { issueId: { items: [...], usedField: string } }
+                    const results = {};
+
+                    for (let i = 0; i < issueIds.length; i++) {
+                        const issueId = issueIds[i];
+                        const parent = entities.Issue.findById(issueId);
+                        
+                        if (!parent) {
+                            results[issueId] = { items: [], usedField: null };
+                            continue;
+                        }
+
+                        // Resolve which field name exists on this issue
+                        const selectedActualName = resolveFieldNameCaseInsensitive(parent, fieldNames);
+                        
+                        if (!selectedActualName) {
+                            results[issueId] = { items: [], usedField: null };
+                            continue;
+                        }
+
+                        // Collect ids: parent first, then all subtasks
+                        const ids = [issueId];
+                        parent.links['parent for'].forEach(function (subTask) { 
+                            ids.push(subTask.id); 
+                        });
+
+                        const items = [];
+                        for (let j = 0; j < ids.length; j++) {
+                            const id = ids[j];
+                            const it = entities.Issue.findById(id);
+                            let value = null;
+                            if (it && it.fields) {
+                                const fld = it.fields[selectedActualName];
+                                if (fld) {
+                                    value = (typeof fld.name === 'string') ? fld.name : null;
+                                }
+                            }
+                            items.push({ id: id, value: value });
+                        }
+
+                        results[issueId] = { 
+                            items: items, 
+                            usedField: selectedActualName 
+                        };
+                    }
+
+                    ctx.response.json(results);
+                } catch (error) {
+                    logError('Failed to get issue field bulk batch', error);
                     sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
                 }
             }

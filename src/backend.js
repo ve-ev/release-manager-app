@@ -168,7 +168,6 @@ exports.httpHandler = {
             method: 'GET',
             path: 'config',
             scope: 'project',
-            permissions: ['UPDATE_PROJECT'],
             handle: function handle(ctx) {
                 try {
                     const settings = ctx.settings;

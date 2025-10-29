@@ -49,6 +49,44 @@ export class API {
   }
 
   /**
+   * Batch fetch bulk field values for multiple issues at once.
+   * This is much more efficient than calling getIssueFieldBulkForFirstAvailable in a loop.
+   * 
+   * @param issueIds - Array of issue IDs to fetch
+   * @param fieldNames - Array of field names to try (in order)
+   * @returns Map of issueId -> { items, usedField }
+   */
+  async getIssueFieldBulkBatch(
+    issueIds: string[], 
+    fieldNames: string[]
+  ): Promise<Record<string, { items: Array<{ id: string; value: string | null }>; usedField?: string }>> {
+    // Validate both arrays before making API call
+    if (!issueIds || issueIds.length === 0) {
+      return {};
+    }
+    if (!fieldNames || fieldNames.length === 0) {
+      return {};
+    }
+
+    try {
+      return await this.fetchJson<Record<string, { items: Array<{ id: string; value: string | null }>; usedField?: string }>>(
+        'backend-global/issue-field-bulk-batch',
+        {
+          method: 'POST',
+          body: {
+            issueIds,
+            fieldNames
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Batch field fetch failed:', error);
+      // Return empty results for all issues
+      return Object.fromEntries(issueIds.map(id => [id, { items: [] }]));
+    }
+  }
+
+  /**
    * Invalidate cached progress settings so next fetch gets fresh data
    */
   invalidateProgressSettingsCache(): void {

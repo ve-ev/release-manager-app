@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import Button from '@jetbrains/ring-ui-built/components/button/button';
 import Input from '@jetbrains/ring-ui-built/components/input/input';
 import Panel from '@jetbrains/ring-ui-built/components/panel/panel';
@@ -8,6 +8,11 @@ import ErrorMessage from '@jetbrains/ring-ui-built/components/error-message/erro
 import { api } from '../../app';
 import '../../styles/settings.css';
 import {AppSettings} from '../../interfaces';
+import {generateColorFromString} from '../../utils/helpers';
+import {useSettingsData} from '../../hooks/useSettingsData';
+import {DEFAULT_PRODUCT_COLORS} from '../../utils/constants';
+import {generateClientId} from '../../utils/id-generator';
+import {invalidateProgressCache} from '../../utils/progress-cache';
 
 
 /**
@@ -21,32 +26,26 @@ interface AppSettingsFormProps {
  * Component for configuring progress tracking settings
  */
 export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
-  const RANDOM_MULTIPLIER = 1000000; // used to generate client-side IDs for new products
-  const DEFAULT_PRODUCT_COLORS = [
-    '#5cb85c', // green
-    '#337ab7', // blue
-    '#f0ad4e', // orange
-    '#5bc0de', // light blue
-    '#d9534f', // red
-    '#9370db', // medium purple
-    '#20b2aa', // light sea green
-    '#ff7f50'  // coral
-  ];
-  // State for storing progress settings
-  const [settings, setSettings] = useState<AppSettings>({
-    customFieldNames: [],
-    greenZoneValues: [],
-    yellowZoneValues: [],
-    redZoneValues: []
-  });
-  const [customFieldNamesInput, setCustomFieldNamesInput] = useState<string>('');
+  // Use custom hook to fetch and manage settings data
+  const { settings, setSettings, isLoading, error: loadError } = useSettingsData(api);
   
+  // Memoize custom field names input from settings
+  const initialCustomFieldNamesInput = useMemo(() => {
+    const names = Array.isArray(settings.customFieldNames) ? settings.customFieldNames : [];
+    return names.join('; ');
+  }, [settings.customFieldNames]);
+  
+  const [customFieldNamesInput, setCustomFieldNamesInput] = useState<string>(initialCustomFieldNamesInput);
+  
+  // Update customFieldNamesInput when settings are loaded
+  React.useEffect(() => {
+    setCustomFieldNamesInput(initialCustomFieldNamesInput);
+  }, [initialCustomFieldNamesInput]);
 
   // State for storing form errors
   const [errors, setErrors] = useState<string[]>([]);
   
-  // State for tracking loading and saving states
-  const [isLoading, setIsLoading] = useState(true);
+  // State for tracking saving state
   const [isSaving, setIsSaving] = useState(false);
   
   // State for new value inputs
@@ -60,27 +59,27 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
   const [editProductName, setEditProductName] = useState<string>('');
 
   // Add new product locally (no POST until Save)
-  const handleAddProduct = () => {
+  const handleAddProduct = useCallback(() => {
     const name = newProductName.trim();
     if (!name) { return; }
     const currentCount = (settings.products || []).length;
     const defaultColor = DEFAULT_PRODUCT_COLORS[currentCount % DEFAULT_PRODUCT_COLORS.length];
-    const newProduct = { id: `${Date.now()}-${Math.floor(Math.random() * RANDOM_MULTIPLIER)}` , name, color: defaultColor };
+    const newProduct = { id: generateClientId('product'), name, color: defaultColor };
     setSettings(prev => ({
       ...prev,
       products: [ ...(prev.products || []), newProduct ]
     }));
     setNewProductName('');
-  };
+  }, [newProductName, settings.products, setSettings]);
 
   // Start editing a product
-  const startEditProduct = (p: { id: string; name: string }) => {
+  const startEditProduct = useCallback((p: { id: string; name: string }) => {
     setEditProductId(p.id);
     setEditProductName(p.name);
-  };
+  }, []);
 
   // Save product name locally
-  const handleSaveProduct = () => {
+  const handleSaveProduct = useCallback(() => {
     if (!editProductId) { return; }
     const name = editProductName.trim();
     if (!name) { return; }
@@ -90,10 +89,10 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
     }));
     setEditProductId(null);
     setEditProductName('');
-  };
+  }, [editProductId, editProductName]);
 
   // Delete product locally
-  const handleDeleteProduct = (id: string) => {
+  const handleDeleteProduct = useCallback((id: string) => {
     setSettings(prev => ({
       ...prev,
       products: (prev.products || []).filter(p => p.id !== id)
@@ -102,53 +101,17 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
       setEditProductId(null);
       setEditProductName('');
     }
-  };
+  }, [editProductId, setSettings]);
 
-  // Helper: fallback color detection (same as ProductTag)
-  const getFallbackColor = (name: string) => {
-    const SHIFT_FACTOR = 5;
-    const hash = name.split('').reduce((acc, char) => {
-      return char.charCodeAt(0) + ((acc << SHIFT_FACTOR) - acc);
-    }, 0);
-    const colors = [
-      '#5cb85c', // green
-      '#337ab7', // blue
-      '#f0ad4e', // orange
-      '#5bc0de', // light blue
-      '#d9534f', // red
-      '#9370db', // medium purple
-      '#20b2aa', // light sea green
-      '#ff7f50'  // coral
-    ];
-    const colorIndex = Math.abs(hash) % colors.length;
-    return colors[colorIndex];
-  };
-
-  // Fetch existing settings on component mount
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        setIsLoading(true);
-        const response = await api.getAppSettings();
-        const withDetectedProductColors = (response.products || []).map(p => ({
-          ...p,
-          color: p.color || getFallbackColor(p.name)
-        }));
-        setSettings({ ...response, products: withDetectedProductColors });
-        const names = Array.isArray(response.customFieldNames) ? response.customFieldNames : [];
-        setCustomFieldNamesInput(names.join('; '));
-      } catch {
-        setErrors(['Failed to load progress settings']);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    fetchSettings();
-  }, []);
+  // Set initial errors from load error
+  React.useEffect(() => {
+    if (loadError) {
+      setErrors([loadError]);
+    }
+  }, [loadError]);
 
   // Handle saving settings
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     // Validate settings
     const validationErrors = [];
     
@@ -183,6 +146,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
 
       // Invalidate progress settings cache and prefetch fresh settings
       api.invalidateProgressSettingsCache();
+      invalidateProgressCache(); // Clear progress zone cache
       await api.getAppSettings();
 
       // Notify application to refresh settings without full reload
@@ -195,10 +159,10 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [settings, editProductId, editProductName, onClose]);
 
   // Handle adding a new value to a zone
-  const handleAddValue = (zone: 'greenZoneValues' | 'yellowZoneValues' | 'redZoneValues', value: string) => {
+  const handleAddValue = useCallback((zone: 'greenZoneValues' | 'yellowZoneValues' | 'redZoneValues', value: string) => {
     if (!value.trim()) {
       return;
     }
@@ -238,18 +202,18 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
     
     // Clear any errors
     setErrors([]);
-  };
+  }, [settings.greenZoneValues, settings.yellowZoneValues, settings.redZoneValues]);
 
   // Handle removing a value from a zone
-  const handleRemoveValue = (zone: 'greenZoneValues' | 'yellowZoneValues' | 'redZoneValues', value: string) => {
+  const handleRemoveValue = useCallback((zone: 'greenZoneValues' | 'yellowZoneValues' | 'redZoneValues', value: string) => {
     setSettings(prev => ({
       ...prev,
       [zone]: prev[zone].filter(v => v !== value)
     }));
-  };
+  }, []);
 
   // Render value tags for a zone
-  const renderValueTags = (zone: 'greenZoneValues' | 'yellowZoneValues' | 'redZoneValues') => {
+  const renderValueTags = useCallback((zone: 'greenZoneValues' | 'yellowZoneValues' | 'redZoneValues') => {
     return settings[zone].map(value => (
       <Tag
         key={value}
@@ -259,7 +223,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
         {value}
       </Tag>
     ));
-  };
+  }, [settings, handleRemoveValue]);
 
   return (
     <div className="app-settings-form">
@@ -377,7 +341,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
                           <input
                             className="product-color-input"
                             type="color"
-                            value={p.color || getFallbackColor(p.name)}
+                            value={p.color || generateColorFromString(p.name)}
                             title="Pick color"
                             onChange={(e) => {
                               const color = e.target.value;
@@ -395,7 +359,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
                           <Tag
                             readOnly
                             className="product-color-preview"
-                            backgroundColor={p.color || getFallbackColor(p.name)}
+                            backgroundColor={p.color || generateColorFromString(p.name)}
                             textColor="#fff"
                             disabled
                           >

@@ -1,5 +1,4 @@
 import React, {memo} from 'react';
-import PropTypes from 'prop-types';
 import Loader from '@jetbrains/ring-ui-built/components/loader/loader';
 import '../../styles/version-table.css';
 /* eslint-disable complexity */
@@ -67,16 +66,6 @@ export const TableHeader: React.FC<{
 
 TableHeader.displayName = 'TableHeader';
 
-TableHeader.propTypes = {
-  showProductColumn: PropTypes.bool,
-  showProgressColumn: PropTypes.bool,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sortKey: PropTypes.oneOf(['product','version','progress','status','releaseDate','featureFreezeDate']) as any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sortDirection: PropTypes.oneOf(['asc','desc']) as any,
-  onSort: PropTypes.func.isRequired
-};
-
 /**
  * Component displayed during data loading
  */
@@ -104,7 +93,3 @@ export const ErrorState: React.FC<ErrorStateProps> = memo(({message}) => (
 ));
 
 ErrorState.displayName = 'ErrorState';
-
-ErrorState.propTypes = {
-  message: PropTypes.string.isRequired
-};

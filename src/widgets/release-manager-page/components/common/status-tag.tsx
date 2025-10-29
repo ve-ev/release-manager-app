@@ -1,11 +1,14 @@
 import React from 'react';
 import Tag from '@jetbrains/ring-ui-built/components/tag/tag';
-import '../styles/version-table.css';
+import '../../styles/version-table.css';
+import {getStatusColor, ReleaseStatus} from '../../utils/helpers';
 
-// Status type definition
-export type ReleaseStatus = 'Planning' | 'In progress' | 'Released' | 'Overdue' | 'Canceled';
+// Re-export ReleaseStatus for convenience
+export type {ReleaseStatus};
 
-// Component to render status as a tag
+/**
+ * Props for StatusTag component
+ */
 export interface StatusTagProps {
   status: ReleaseStatus;
   showFreezeIndicator?: boolean;
@@ -13,28 +16,13 @@ export interface StatusTagProps {
   onClick?: (e: React.MouseEvent) => void;
 }
 
+/**
+ * Component to render release status as a tag with color
+ */
 export const StatusTag: React.FC<StatusTagProps> = ({ status, showFreezeIndicator = false, showTodayIndicator = false, onClick }) => {
   if (!status) {
     return null;
   }
-  
-  // Define colors for each status
-  const getStatusColor = (statusValue: ReleaseStatus): { bg: string; text: string } => {
-    switch (statusValue) {
-      case 'Planning':
-        return { bg: '#e0e0ff', text: '#4040a0' }; // Light blue
-      case 'Released':
-        return { bg: '#e0ffe0', text: '#206020' }; // Light green
-      case 'In progress':
-        return { bg: '#d0f0ff', text: '#0060a0' }; // Blue
-      case 'Overdue':
-        return { bg: '#ffe0e0', text: '#a02020' }; // Light red
-      case 'Canceled':
-        return { bg: '#f0f0f0', text: '#606060' }; // Gray
-      default:
-        return { bg: '#e0e0e0', text: '#404040' }; // Default gray
-    }
-  };
   
   const { bg, text } = getStatusColor(status);
   
@@ -57,3 +45,4 @@ export const StatusTag: React.FC<StatusTagProps> = ({ status, showFreezeIndicato
     </Tag>
   );
 };
+

@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useState, useMemo} from 'react';
 import Button from '@jetbrains/ring-ui-built/components/button/button';
 import Panel from '@jetbrains/ring-ui-built/components/panel/panel';
 import ErrorMessage from '@jetbrains/ring-ui-built/components/error-message/error-message';
@@ -10,6 +10,9 @@ import '../../styles/release-version-form.css';
 import FormFields from './fields/form-fields.tsx';
 import {ReleaseVersion, PlannedOrMetaIssue} from '../../interfaces';
 import MetaIssueForm, { MetaIssueData } from './meta-issue-form.tsx';
+import {validateReleaseVersion} from '../../utils/validation-helpers';
+import {useIssueSearch} from '../../hooks';
+import {generateClientId} from '../../utils/id-generator';
 
 // Define the form props
 interface ReleaseVersionFormProps {
@@ -48,25 +51,6 @@ const styles = {
 
 // All form field components have been moved to separate files in the components directory
 
-// Validate release version data
-const validateReleaseVersion = (formData: ReleaseVersion): string[] => {
-  const errors: string[] = [];
-
-  // Only include non-field-specific errors in the general error list
-  // Field-specific errors (version, releaseDate) are handled separately
-
-  if (formData.featureFreezeDate && formData.releaseDate) {
-    const freezeDate = new Date(formData.featureFreezeDate);
-    const releaseDate = new Date(formData.releaseDate);
-
-    if (freezeDate > releaseDate) {
-      errors.push('Feature Freeze Date must be before Release Date');
-    }
-  }
-
-  return errors;
-};
-
 const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, onSave, onCancel, metaIssuesEnabled, initialShowMetaIssueForm}) => {
   // Initialize form state
   const [formData, setFormData] = useState<ReleaseVersion>({
@@ -85,11 +69,12 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
   const [versionError, setVersionError] = useState<string>();
   const [releaseDateError, setReleaseDateError] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingIssues, setIsLoadingIssues] = useState(false);
   const [linkedIssuesInput, setLinkedIssuesInput] = useState('');
-  const [searchError, setSearchError] = useState<string>();
   const [showMetaIssueForm, setShowMetaIssueForm] = useState<boolean>(!!initialShowMetaIssueForm);
   const [editMetaIndex, setEditMetaIndex] = useState<number | null>(null);
+  
+  // Use custom hook for issue search functionality
+  const { isLoadingIssues, searchError, searchIssues, setSearchError } = useIssueSearch(host);
 
   // Reference to store timeout ID for debounce
   const debounceTimeoutRef = React.useRef<number | null>(null);
@@ -167,118 +152,18 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
     }
   };
 
-  // Planned issues are now handled by fetchIssues function
-
-  // Helper function to fetch a single issue
-  const fetchSingleIssue = async (issueId: string): Promise<{
-    found: boolean;
-    issue?: {
-      id: string;
-      idReadable: string;
-      summary: string;
-    };
-  }> => {
-    try {
-      const response = await host.fetchApp(`backend-global/issue?issueId=${encodeURIComponent(issueId)}`, { scope: false });
-
-      if (response) {
-        // Type assertion for response
-        const issueResponse = response as {
-          id: string;
-          idReadable: string;
-          summary: string;
-        };
-
-        return {
-          found: true,
-          issue: {
-            id: issueResponse.id,
-            idReadable: issueResponse.idReadable,
-            summary: issueResponse.summary
-          }
-        };
-      }
-      return { found: false };
-    } catch {
-      return { found: false };
-    }
-  };
-
-  // Function to update the planned issues list (memoized, uses functional state update to avoid stale closures)
-  const updatePlannedIssues = React.useCallback((newIssues: Array<{id: string; idReadable: string; summary: string}>) => {
-    if (newIssues.length === 0) {
-      return;
-    }
-
-    setFormData(prev => {
-      const existingIssues = prev.plannedIssues || [];
-
-      // Filter out duplicates by checking if issue ID already exists
-      const uniqueNewIssues = newIssues.filter(newIssue =>
-        !existingIssues.some(existingIssue => existingIssue.id === newIssue.id)
-      );
-
-      // If all issues were duplicates, show a message
-      if (uniqueNewIssues.length === 0) {
-        setSearchError('All issues are already added to the list.');
-        return prev;
-      }
-
-      const combinedIssues = [...existingIssues, ...uniqueNewIssues];
-      return {
+  // Handle search button click - uses shared issue search hook
+  const handleSearchIssues = useCallback(async () => {
+    const existingIssues = (formData.plannedIssues || []) as Array<{id: string; idReadable?: string; summary: string}>;
+    const uniqueIssues = await searchIssues(linkedIssuesInput, existingIssues);
+    
+    if (uniqueIssues.length > 0) {
+      setFormData(prev => ({
         ...prev,
-        plannedIssues: combinedIssues
-      };
-    });
-  }, [setFormData, setSearchError]);
-
-  // Function to fetch issues based on input
-  const fetchIssues = useCallback(async (input: string) => {
-    const issueIds = input.split(',').map(id => id.trim()).filter(id => id);
-
-    // If no issue IDs, do nothing
-    if (issueIds.length === 0) {
-      return;
+        plannedIssues: [...(prev.plannedIssues || []), ...uniqueIssues]
+      }));
     }
-
-    const newIssues = [];
-    const notFoundIssues = [];
-
-    setIsLoadingIssues(true);
-
-    // Fetch each issue's details
-    for (const issueId of issueIds) {
-      const result = await fetchSingleIssue(issueId);
-
-      if (result.found && result.issue) {
-        newIssues.push(result.issue);
-      } else {
-        notFoundIssues.push(issueId);
-      }
-    }
-
-    setIsLoadingIssues(false);
-
-    // Show error message if any issues weren't found
-    if (notFoundIssues.length > 0) {
-      setSearchError(`Could not find the following issues: ${notFoundIssues.join(', ')}`);
-      // Only update the list if we found any valid issues
-      if (newIssues.length > 0) {
-        updatePlannedIssues(newIssues);
-      }
-    } else {
-      setSearchError(undefined);
-      // Update the list with found issues
-      updatePlannedIssues(newIssues);
-    }
-  }, [updatePlannedIssues]);
-
-  // Handle search button click
-  const handleSearchIssues = useCallback(() => {
-    // Clear any previous search error
-    setSearchError(undefined);
-    fetchIssues(linkedIssuesInput);
-  }, [fetchIssues, linkedIssuesInput, setSearchError]);
+  }, [linkedIssuesInput, formData.plannedIssues, searchIssues]);
 
   // Handle removing an issue from the list
   const handleRemoveIssue = useCallback((issueId: string) => {
@@ -291,16 +176,63 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
     }
   }, [formData]);
 
+  // Handle saving meta issue data
+  const handleMetaIssueSave = useCallback(async (meta: MetaIssueData) => {
+    // Prepare updated planned issues array
+    let updatedPlannedIssues: PlannedOrMetaIssue[] = [];
+    
+    if (editMetaIndex !== null && formData.plannedIssues && formData.plannedIssues[editMetaIndex]) {
+      const updated = [...(formData.plannedIssues || [])];
+      const existing = updated[editMetaIndex];
+      updated[editMetaIndex] = {
+        ...existing,
+        summary: meta.summary,
+        isMeta: true,
+        idReadable: existing.idReadable || 'META',
+        metaRelatedIssueIds: meta.relatedIssueIds,
+      } as PlannedOrMetaIssue;
+      updatedPlannedIssues = updated as PlannedOrMetaIssue[];
+    } else {
+      const newItem = {
+        id: generateClientId('META'),
+        idReadable: 'META',
+        summary: meta.summary,
+        isMeta: true,
+        metaRelatedIssueIds: meta.relatedIssueIds
+      } as PlannedOrMetaIssue;
+      updatedPlannedIssues = [...(formData.plannedIssues || []), newItem] as PlannedOrMetaIssue[];
+    }
+
+    // If MetaIssueForm was opened from Actions menu, persist immediately and let parent close & refresh
+    if (initialShowMetaIssueForm) {
+      const updatedFormData: ReleaseVersion = { ...formData, plannedIssues: updatedPlannedIssues };
+      await onSave(updatedFormData);
+      return; // App will close the form and refresh on successful save
+    }
+
+    // Otherwise, update local state and return to ReleaseVersion form
+    setFormData(prev => ({ ...prev, plannedIssues: updatedPlannedIssues }));
+    setShowMetaIssueForm(false);
+    setEditMetaIndex(null);
+  }, [editMetaIndex, formData, initialShowMetaIssueForm, onSave]);
+
+  // Handle canceling meta issue form
+  const handleMetaIssueCancel = useCallback(() => {
+    setShowMetaIssueForm(false);
+    setEditMetaIndex(null);
+    // If MetaIssueForm was opened via Actions menu, close the whole form and return to the main page
+    if (initialShowMetaIssueForm) {
+      onCancel();
+    }
+  }, [initialShowMetaIssueForm, onCancel]);
+
   // Handle linked issues input changes
   const handleLinkedIssuesInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setLinkedIssuesInput(value);
-
-    // No automatic search triggering - only update the input value
+    setLinkedIssuesInput(e.target.value);
   }, []);
 
   // Handle button click for form submission - avoids standard form submission to work around sandbox restrictions
-  const handleButtonSubmit = async () => {
+  const handleButtonSubmit = useCallback(async () => {
     const validationErrors = validateReleaseVersion(formData);
     setErrors(validationErrors);
 
@@ -322,68 +254,54 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
         setIsSubmitting(false);
       }
     }
-  };
+  }, [formData, onSave]);
 
   // Determine button text
-  const getButtonText = () => {
+  const buttonText = useMemo(() => {
     if (isSubmitting) {
       return <LoaderInline/>;
     }
     return releaseVersion?.id ? 'Update' : 'Create';
-  };
+  }, [isSubmitting, releaseVersion?.id]);
+
+  // Memoize initial values for meta issue form
+  const metaIssueInitialSummary = useMemo(() => {
+    if (editMetaIndex !== null && formData.plannedIssues && formData.plannedIssues[editMetaIndex]) {
+      return formData.plannedIssues[editMetaIndex].summary || '';
+    }
+    return '';
+  }, [editMetaIndex, formData.plannedIssues]);
+
+  const metaIssueInitialRelatedIds = useMemo(() => {
+    if (editMetaIndex !== null && formData.plannedIssues && formData.plannedIssues[editMetaIndex]) {
+      return (formData.plannedIssues[editMetaIndex] as PlannedOrMetaIssue).metaRelatedIssueIds || [];
+    }
+    return [];
+  }, [editMetaIndex, formData.plannedIssues]);
+
+  // Memoize the callback to add a new meta issue
+  const handleAddMetaIssue = useCallback(() => {
+    setEditMetaIndex(null);
+    setShowMetaIssueForm(true);
+  }, []);
+
+  // Memoize the callback to edit an existing meta issue
+  const handleEditMetaIssueClick = useCallback((issue: PlannedOrMetaIssue, index: number) => {
+    if (issue.isMeta) {
+      setEditMetaIndex(index);
+      setShowMetaIssueForm(true);
+    }
+  }, []);
 
   // Show ONLY MetaIssueForm when requested (for both add and edit flows)
   if (metaIssuesEnabled && showMetaIssueForm) {
     return (
       <div className={`${styles.container} meta-issue-form-container`}>
         <MetaIssueForm
-          onSave={async (meta: MetaIssueData) => {
-            // Prepare updated planned issues array
-            let updatedPlannedIssues: PlannedOrMetaIssue[] = [];
-            if (editMetaIndex !== null && formData.plannedIssues && formData.plannedIssues[editMetaIndex]) {
-              const updated = [...(formData.plannedIssues || [])];
-              const existing = updated[editMetaIndex];
-              updated[editMetaIndex] = {
-                ...existing,
-                summary: meta.summary,
-                isMeta: true,
-                idReadable: existing.idReadable || 'META',
-                metaRelatedIssueIds: meta.relatedIssueIds,
-              } as PlannedOrMetaIssue;
-              updatedPlannedIssues = updated as PlannedOrMetaIssue[];
-            } else {
-              const newItem = {
-                id: `META-${Date.now()}`,
-                idReadable: 'META',
-                summary: meta.summary,
-                isMeta: true,
-                metaRelatedIssueIds: meta.relatedIssueIds
-              } as PlannedOrMetaIssue;
-              updatedPlannedIssues = [...(formData.plannedIssues || []), newItem] as PlannedOrMetaIssue[];
-            }
-
-            // If MetaIssueForm was opened from Actions menu, persist immediately and let parent close & refresh
-            if (initialShowMetaIssueForm) {
-              const updatedFormData: ReleaseVersion = { ...formData, plannedIssues: updatedPlannedIssues };
-              await onSave(updatedFormData);
-              return; // App will close the form and refresh on successful save
-            }
-
-            // Otherwise, update local state and return to ReleaseVersion form
-            setFormData(prev => ({ ...prev, plannedIssues: updatedPlannedIssues }));
-            setShowMetaIssueForm(false);
-            setEditMetaIndex(null);
-          }}
-          onCancel={() => {
-            setShowMetaIssueForm(false);
-            setEditMetaIndex(null);
-            // If MetaIssueForm was opened via Actions menu, close the whole form and return to the main page
-            if (initialShowMetaIssueForm) {
-              onCancel();
-            }
-          }}
-          initialSummary={(editMetaIndex !== null && formData.plannedIssues && formData.plannedIssues[editMetaIndex]?.summary) || ''}
-          initialRelatedIssueIds={(editMetaIndex !== null && formData.plannedIssues && (formData.plannedIssues[editMetaIndex]?.metaRelatedIssueIds || [])) || []}
+          onSave={handleMetaIssueSave}
+          onCancel={handleMetaIssueCancel}
+          initialSummary={metaIssueInitialSummary}
+          initialRelatedIssueIds={metaIssueInitialRelatedIds}
           isEdit={editMetaIndex !== null}
         />
       </div>
@@ -419,16 +337,16 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
           versionError={versionError}
           releaseDateError={releaseDateError}
           plannedIssuesExtraAction={metaIssuesEnabled ? (
-            <Button onClick={() => { setEditMetaIndex(null); setShowMetaIssueForm(true); }}>Add Meta Issue</Button>
+            <Button onClick={handleAddMetaIssue}>Add Meta Issue</Button>
           ) : undefined}
-          onEditMetaIssue={(issue, index) => { if (issue.isMeta) { setEditMetaIndex(index); setShowMetaIssueForm(true); } }}
+          onEditMetaIssue={handleEditMetaIssueClick}
         />
 
         <Panel className={styles.formPanel}>
           <div className={styles.buttons}>
             <Button onClick={onCancel}>Cancel</Button>
             <Button primary onClick={handleButtonSubmit} disabled={isSubmitting}>
-              {getButtonText()}
+              {buttonText}
             </Button>
           </div>
         </Panel>
