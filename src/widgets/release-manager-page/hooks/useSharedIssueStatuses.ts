@@ -77,6 +77,7 @@ export function useSharedIssueStatuses(
   };
 
   // Function to fetch and update statuses
+  // eslint-disable-next-line complexity
   const fetchAndApply = useCallback(async () => {
     if (!shouldFetch()) {
       return;
@@ -93,14 +94,15 @@ export function useSharedIssueStatuses(
       const castIssue = issueStatuses as Record<string, IssueStatus>;
       const castTest = testStatuses as Record<string, TestStatus>;
 
+      const prevLoaded = globalStatusesLoaded;
       const { hasIssueChanges, hasTestChanges } = updateGlobalState(castIssue, castTest);
 
-      // Only set to true if we actually got data
+      // Mark loaded on any successful response, even if empty
       const hasData = Object.keys(castIssue).length > 0 || Object.keys(castTest).length > 0;
-      globalStatusesLoaded = hasData;
+      globalStatusesLoaded = true;
 
-      // Notify all listeners if there were changes or if status loaded state changed
-      if (hasIssueChanges || hasTestChanges || hasData) {
+      // Notify all listeners if there were changes or if loaded state changed
+      if (hasIssueChanges || hasTestChanges || prevLoaded !== globalStatusesLoaded || hasData) {
         listeners.forEach(listener => listener());
       }
     } catch (e) {
