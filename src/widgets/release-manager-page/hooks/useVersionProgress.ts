@@ -1,4 +1,4 @@
-import {useState, useEffect} from 'react';
+import {useState, useEffect, useMemo} from 'react';
 import {API} from '../api';
 import {ReleaseVersion, AppSettings} from '../interfaces';
 import {getZoneForValue} from '../utils/progress-helpers';
@@ -21,7 +21,7 @@ interface UseVersionProgressReturn {
  * Custom hook to calculate progress for planned issues in a release version
  * Handles both regular issues and meta issues with related issues
  * Supports manual issue status overrides (Fixed/Merged -> green)
- * 
+ *
  * OPTIMIZED: Uses batch API to fetch all field data in one request
  */
 export function useVersionProgress(
@@ -39,10 +39,93 @@ export function useVersionProgress(
   });
   const [mainAvailable, setMainAvailable] = useState<boolean>(false);
 
+  // Memoize the issue IDs to avoid unnecessary recalculations
+  const effectiveIdsRaw = useMemo(() => {
+    if (!item.plannedIssues || item.plannedIssues.length === 0) {
+      return [];
+    }
+    return item.plannedIssues
+      .filter(Boolean)
+      .map(issue => issue.id)
+      .filter(Boolean);
+  }, [item.plannedIssues]);
+
+  // Memoize the filtered IDs (excluding Discoped issues)
+  const filteredIds = useMemo(() => {
+    const uniqueIds = Array.from(new Set(effectiveIdsRaw));
+    return uniqueIds.filter(id => {
+      const st = issueStatusMap[id as keyof typeof issueStatusMap] || 'Unresolved';
+      return st !== 'Discoped';
+    });
+  }, [effectiveIdsRaw, issueStatusMap]);
+
+  // Memoize the issue map to avoid recreating it on every render
+  type IssueRef = { id: string; isMeta?: boolean; metaRelatedIssueIds?: string[] };
+  const idToIssue = useMemo(() => {
+    return Object.fromEntries(
+      (item.plannedIssues || [])
+        .filter(Boolean)
+        .map(it => [
+          it.id,
+          {
+            id: it.id,
+            isMeta: (it as unknown as IssueRef).isMeta,
+            metaRelatedIssueIds: (it as unknown as IssueRef).metaRelatedIssueIds
+          }
+        ])
+    );
+  }, [item.plannedIssues]);
+
+  // Memoize the set of issue IDs that need field data
+  const allIssueIdsToFetch = useMemo(() => {
+    const idsToFetch = new Set<string>();
+
+    filteredIds.forEach((id: string) => {
+      const issue = idToIssue[id];
+      const st = issueStatusMap[id as keyof typeof issueStatusMap] || 'Unresolved';
+
+      // Skip if manual override
+      if (st === 'Fixed' || st === 'Merged') {
+        return;
+      }
+
+      // For meta issues, collect related issue IDs
+      if (issue && issue.isMeta && Array.isArray(issue.metaRelatedIssueIds)) {
+        issue.metaRelatedIssueIds.forEach((relId: string) => {
+          const relStatus = issueStatusMap[relId as keyof typeof issueStatusMap] || 'Unresolved';
+          // Only fetch if not discoped and not manually set
+          if (relStatus !== 'Discoped' && relStatus !== 'Fixed' && relStatus !== 'Merged') {
+            idsToFetch.add(relId);
+          }
+        });
+      } else {
+        // Regular issue
+        idsToFetch.add(id);
+      }
+    });
+
+    return idsToFetch;
+  }, [filteredIds, idToIssue, issueStatusMap]);
+
+  // Check if there are any manual statuses (Fixed/Merged) that should be counted
+  const hasManualStatuses = useMemo(() => {
+    return filteredIds.some(id => {
+      const st = issueStatusMap[id as keyof typeof issueStatusMap] || 'Unresolved';
+      return st === 'Fixed' || st === 'Merged';
+    });
+  }, [filteredIds, issueStatusMap]);
+
+  // Set mainAvailable to true if there are manual statuses, even before the effect runs
+  useEffect(() => {
+    if (hasManualStatuses) {
+      setMainAvailable(true);
+    }
+  }, [hasManualStatuses]);
+
   useEffect(() => {
     // Early exit only if there are no planned issues
     // We still need to process manual status overrides (Fixed/Merged) even without custom fields!
-    if (!item.plannedIssues || item.plannedIssues.length === 0) {
+    if (filteredIds.length === 0) {
       setMainProgress({ green: 0, yellow: 0, red: 0, grey: 0, total: 0 });
       setMainAvailable(false);
       return;
@@ -50,74 +133,15 @@ export function useVersionProgress(
 
     const fetchIssueData = async () => {
       try {
-        // Step 1: Collect all issue IDs and build the issue map
-        const effectiveIdsRaw: string[] = [];
-        (item.plannedIssues || []).forEach(issue => {
-          if (issue && issue.id) {
-            effectiveIdsRaw.push(issue.id);
-          }
-        });
-        const effectiveIds = Array.from(new Set(effectiveIdsRaw));
-
-        // Filter out Discoped issues
-        const filteredIds = effectiveIds.filter(id => {
-          const st = issueStatusMap[id] || 'Unresolved';
-          return st !== 'Discoped';
-        });
-
-        if (filteredIds.length === 0) {
-          setMainProgress({ green: 0, yellow: 0, red: 0, grey: 0, total: 0 });
-          setMainAvailable(false);
-          return;
-        }
-
-        type IssueRef = { id: string; isMeta?: boolean; metaRelatedIssueIds?: string[] };
-        const idToIssue: Record<string, IssueRef> = Object.fromEntries(
-          (item.plannedIssues || [])
-            .filter(Boolean)
-            .map(it => [
-              it.id,
-              {
-                id: it.id,
-                isMeta: (it as unknown as IssueRef).isMeta,
-                metaRelatedIssueIds: (it as unknown as IssueRef).metaRelatedIssueIds
-              }
-            ])
-        );
-
-        // Step 2: Collect ALL issue IDs that need field data (including meta-related)
-        const allIssueIdsToFetch = new Set<string>();
-        
-        filteredIds.forEach(id => {
-          const issue = idToIssue[id];
-          const st = issueStatusMap[id] || 'Unresolved';
-          
-          // Skip if manual override
-          if (st === 'Fixed' || st === 'Merged') {
-            return;
-          }
-
-          // For meta issues, collect related issue IDs
-          if (issue && issue.isMeta && Array.isArray(issue.metaRelatedIssueIds)) {
-            issue.metaRelatedIssueIds.forEach(relId => {
-              const relStatus = issueStatusMap[relId] || 'Unresolved';
-              // Only fetch if not discoped and not manually set
-              if (relStatus !== 'Discoped' && relStatus !== 'Fixed' && relStatus !== 'Merged') {
-                allIssueIdsToFetch.add(relId);
-              }
-            });
-          } else {
-            // Regular issue
-            allIssueIdsToFetch.add(id);
-          }
-        });
+        // Step 1 & 2: Use memoized values for issue map and IDs to fetch
 
         // Step 3: Fetch ALL field data in ONE batch request
         // Only fetch if we have both issues to fetch AND custom field names configured
         // If no custom fields configured, we'll still process manual overrides (Fixed/Merged)
         const hasCustomFields = progressSettings.customFieldNames && progressSettings.customFieldNames.length > 0;
         const shouldFetch = allIssueIdsToFetch.size > 0 && hasCustomFields;
-        
+
+        // Use memoized allIssueIdsToFetch to avoid duplicate API calls
         const batchResults = shouldFetch
           ? await api.getIssueFieldBulkBatch(
               Array.from(allIssueIdsToFetch),
@@ -127,14 +151,16 @@ export function useVersionProgress(
 
         // Step 4: Process results
         const initial = { green: 0, yellow: 0, red: 0, grey: 0, total: 0 };
-        let mainAny = false;
+        let mainAny = hasManualStatuses; // Initialize with hasManualStatuses to count manual statuses on init
 
-        const processedResults = filteredIds.map(id => {
+        // eslint-disable-next-line complexity
+        const processedResults = filteredIds.map((id: string) => {
           const issue = idToIssue[id];
-          const st = issueStatusMap[id] || 'Unresolved';
-          
+          const st = issueStatusMap[id as keyof typeof issueStatusMap] || 'Unresolved';
+
           // Manual override: Fixed/Merged -> green
           if (st === 'Fixed' || st === 'Merged') {
+            mainAny = true; // Ensure manual statuses are counted in availability check
             return { parent: { green: 1, yellow: 0, red: 0, grey: 0, total: 1, available: true } };
           }
 
@@ -149,7 +175,7 @@ export function useVersionProgress(
             let available = false;
 
             for (const relId of relatedIds) {
-              const relStatus = issueStatusMap[relId] || 'Unresolved';
+              const relStatus = issueStatusMap[relId as keyof typeof issueStatusMap] || 'Unresolved';
               if (relStatus === 'Discoped') {
                 continue;
               }
@@ -169,8 +195,12 @@ export function useVersionProgress(
                   available = true;
                 }
                 const z = getZoneForValue(parentVal, progressSettings);
-                if (z === 'red') hasRed = true;
-                if (z === 'yellow') hasYellow = true;
+                if (z === 'red') {
+                  hasRed = true;
+                }
+                if (z === 'yellow') {
+                  hasYellow = true;
+                }
                 if (z === 'green') {
                   hasGreen = true;
                 } else {
@@ -240,8 +270,12 @@ export function useVersionProgress(
               let hasGreen = false;
               for (const v of subtaskValues) {
                 const z = getZoneForValue(v, progressSettings);
-                if (z === 'red') hasRed = true;
-                if (z === 'yellow') hasYellow = true;
+                if (z === 'red') {
+                  hasRed = true;
+                }
+                if (z === 'yellow') {
+                  hasYellow = true;
+                }
                 if (z === 'green') {
                   hasGreen = true;
                 } else {
@@ -275,7 +309,7 @@ export function useVersionProgress(
         });
 
         const aggregatedMain = processedResults.reduce(
-          (acc, r) => {
+          (acc: ProgressData, r: { parent: ProgressData & { available: boolean } }) => {
             acc.green += r.parent.green;
             acc.yellow += r.parent.yellow;
             acc.red += r.parent.red;
@@ -292,13 +326,14 @@ export function useVersionProgress(
         setMainProgress(aggregatedMain);
         setMainAvailable(mainAny);
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.error('Failed to calculate version progress:', error);
       }
     };
 
     fetchIssueData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item.plannedIssues, progressSettings, issueStatusMap]);
+    // Include all memoized values in dependencies to ensure effect only runs when inputs change
+  }, [filteredIds, idToIssue, allIssueIdsToFetch, progressSettings, api, hasManualStatuses, issueStatusMap]);
 
   return {
     mainProgress,

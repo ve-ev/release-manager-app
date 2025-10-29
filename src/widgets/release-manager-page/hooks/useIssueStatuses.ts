@@ -1,8 +1,12 @@
-import {useState, useEffect, useCallback} from 'react';
+import {useState, useCallback} from 'react';
 import {API} from '../api';
+import {useSharedIssueStatuses} from './useSharedIssueStatuses';
 
 export type IssueStatus = 'Unresolved' | 'Fixed' | 'Merged' | 'Discoped';
 export type TestStatus = 'Tested' | 'Not tested' | 'Test NA';
+
+// Constants
+const DEFAULT_POLL_INTERVAL = 5000; // 5 seconds
 
 interface UseIssueStatusesReturn {
   issueStatusMap: Record<string, IssueStatus>;
@@ -15,115 +19,71 @@ interface UseIssueStatusesReturn {
 /**
  * Custom hook to manage issue statuses for manual issue management
  * Handles loading, updating, and syncing statuses across users via polling
+ *
+ * OPTIMIZED: Uses shared state across all instances to prevent duplicate API calls
  */
 export function useIssueStatuses(
   api: API,
   issues: Array<{ id: string }>,
   manualIssueManagement?: boolean,
-  pollInterval = 5000
+  pollInterval = DEFAULT_POLL_INTERVAL
 ): UseIssueStatusesReturn {
-  const [issueStatusMap, setIssueStatusMap] = useState<Record<string, IssueStatus>>(() => (
-    Object.fromEntries(issues.map(it => [it.id, 'Unresolved' as IssueStatus]))
-  ));
+  // Use the shared hook to get global state and prevent duplicate API calls
+  const {
+    issueStatusMap: sharedIssueStatusMap,
+    issueTestStatusMap: sharedIssueTestStatusMap,
+    statusesLoaded: sharedStatusesLoaded,
+    setIssueStatus: sharedSetIssueStatus,
+    setTestStatus: sharedSetTestStatus
+  } = useSharedIssueStatuses(api, pollInterval);
 
-  const [issueTestStatusMap, setIssueTestStatusMap] = useState<Record<string, TestStatus>>(() => (
-    Object.fromEntries(issues.map(it => [it.id, 'Not tested' as TestStatus]))
-  ));
+  // Local state for when manual management is disabled
+  const [localStatusesLoaded] = useState<boolean>(() => !manualIssueManagement);
 
-  const [statusesLoaded, setStatusesLoaded] = useState<boolean>(() => !manualIssueManagement);
+  // Create default maps for issues that aren't in the shared state yet
+  const defaultIssueStatusMap = Object.fromEntries(
+    issues.map(it => [it.id, sharedIssueStatusMap[it.id] || 'Unresolved' as IssueStatus])
+  );
 
-  // Load persisted statuses and keep them in sync across users
-  useEffect(() => {
-    let isMounted = true;
+  const defaultIssueTestStatusMap = Object.fromEntries(
+    issues.map(it => [it.id, sharedIssueTestStatusMap[it.id] || 'Not tested' as TestStatus])
+  );
 
-    const fetchAndApply = async () => {
-      try {
-        const { issueStatuses, testStatuses } = await api.getIssueStatuses();
-        if (!isMounted) {
-          return;
-        }
-        const castIssue = issueStatuses as Record<string, IssueStatus>;
-        const castTest = testStatuses as Record<string, TestStatus>;
-        
-        // Only update if data has actually changed (prevents unnecessary re-renders)
-        setIssueStatusMap(prev => {
-          const hasChanges = Object.keys(castIssue).some(key => prev[key] !== castIssue[key]);
-          return hasChanges ? { ...prev, ...castIssue } : prev;
-        });
-        setIssueTestStatusMap(prev => {
-          const hasChanges = Object.keys(castTest).some(key => prev[key] !== castTest[key]);
-          return hasChanges ? { ...prev, ...castTest } : prev;
-        });
-        setStatusesLoaded(true);
-      } catch (e) {
-        console.error('Failed to load issue statuses', e as Error);
-        // Even if failed, avoid indefinite hidden state
-        setStatusesLoaded(true);
-      }
-    };
+  // Merge shared state with defaults
+  const effectiveIssueStatusMap = {
+    ...defaultIssueStatusMap,
+    ...sharedIssueStatusMap
+  };
 
-    if (manualIssueManagement) {
-      // When controls get enabled, show placeholders until the first load completes
-      setStatusesLoaded(false);
+  const effectiveIssueTestStatusMap = {
+    ...defaultIssueTestStatusMap,
+    ...sharedIssueTestStatusMap
+  };
 
-      // Initial load
-      fetchAndApply();
+  // Determine if statuses are loaded based on manual management setting
+  const statusesLoaded = manualIssueManagement ? sharedStatusesLoaded : localStatusesLoaded;
 
-      // Immediate refresh when someone updates in this or another tab
-      const localHandler = () => {
-        fetchAndApply();
-      };
-      window.addEventListener('issue-statuses-updated', localHandler as EventListener);
-
-      // Polling to synchronize across users
-      const interval = window.setInterval(fetchAndApply, pollInterval);
-
-      return () => {
-        isMounted = false;
-        window.removeEventListener('issue-statuses-updated', localHandler as EventListener);
-        window.clearInterval(interval);
-      };
-    } else {
-      setStatusesLoaded(true);
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [manualIssueManagement, pollInterval, api]);
-
+  // Wrapper for setIssueStatus that uses the shared implementation
   const setIssueStatus = useCallback((id: string, status: IssueStatus) => {
-    setIssueStatusMap(prev => ({ ...prev, [id]: status }));
-    // Reset test status when switching away from Fixed/Merged
-    if (!(status === 'Fixed' || status === 'Merged')) {
-      setIssueTestStatusMap(prev => ({ ...prev, [id]: 'Not tested' }));
-    }
-    // Persist without immediately notifying - let polling sync naturally
-    // This prevents race conditions where the event fires before the API completes
-    api.setIssueStatus(id, status)
-      .catch((e: Error) => {
-        console.error('Failed to save issue status', e);
-        // On error, revert local state by triggering a refresh
-        window.dispatchEvent(new Event('issue-statuses-updated'));
-      });
-  }, [api]);
+    sharedSetIssueStatus(id, status).catch((e: Error) => {
+      // eslint-disable-next-line no-console
+      console.error('Failed to save issue status', e);
+    });
+  }, [sharedSetIssueStatus]);
 
+  // Wrapper for setTestStatus that uses the shared implementation
   const setTestStatus = useCallback((id: string, status: TestStatus) => {
-    setIssueTestStatusMap(prev => ({ ...prev, [id]: status }));
-    api.setIssueTestStatus(id, status)
-      .catch((e: Error) => {
-        console.error('Failed to save issue test status', e);
-        // On error, revert local state by triggering a refresh
-        window.dispatchEvent(new Event('issue-statuses-updated'));
-      });
-  }, [api]);
+    sharedSetTestStatus(id, status).catch((e: Error) => {
+      // eslint-disable-next-line no-console
+      console.error('Failed to save issue test status', e);
+    });
+  }, [sharedSetTestStatus]);
 
   return {
-    issueStatusMap,
-    issueTestStatusMap,
+    issueStatusMap: effectiveIssueStatusMap,
+    issueTestStatusMap: effectiveIssueTestStatusMap,
     statusesLoaded,
     setIssueStatus,
     setTestStatus
   };
 }
-
