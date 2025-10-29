@@ -66,7 +66,6 @@ const ReleaseVersionItemComponent: React.FC<ReleaseVersionItemProps> = ({
   metaIssuesEnabled,
   handleAddMetaIssue,
   handleGenerateReleaseNotes,
-  settings,
   progressSettings
 }) => {
   // CENTRALIZED hook instance - called ONCE per ReleaseVersionItem
@@ -86,53 +85,53 @@ const ReleaseVersionItemComponent: React.FC<ReleaseVersionItemProps> = ({
 
   // Memoize expensive computations
   const normalizedBaseUrl = useMemo(() => api.getBaseUrl(), []); // Base URL doesn't change
-  
+
   // Memoize status info calculation (involves multiple Date object creations)
   const statusInfo = useMemo(() => getStatusInfo(item), [item]);
-  
+
   // Memoize content visibility calculation
   const contentVisibility = useMemo(() => getContentVisibility(item), [item]);
-  
+
   // Memoize date highlighting calculation (involves Date object creations)
   const dateHighlighting = useMemo(() => getDateHighlighting(item), [item]);
-  
+
   // Memoize expensive date check
   const isReleaseDateExpired = useMemo(() => isExpired(item.releaseDate), [item.releaseDate]);
-  
+
   // Check if any expandable content section is showing
   const isAnyContentSectionShowing = isExpanded || isInfoExpanded;
   const isClosed = !isAnyContentSectionShowing;
 
   // Check if section should be collapsible
-  const isCollapsible = contentVisibility.hasPlannedIssues || 
-                        statusInfo.showOverdueStatus || 
-                        statusInfo.showFreezeNotice || 
+  const isCollapsible = contentVisibility.hasPlannedIssues ||
+                        statusInfo.showOverdueStatus ||
+                        statusInfo.showFreezeNotice ||
                         !contentVisibility.hasInfoToShow;
-  
+
   // Memoize event handlers
   const handleExpandClick = useCallback((e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
     }
-    
+
     // Determine if we're expanding or collapsing
     const shouldExpand = !isAnyContentSectionShowing;
-    
+
     // Always handle the info section first
     toggleInfoSection(item.id, shouldExpand);
-    
+
     // Handle planned issues if needed
     if (isCollapsible && (shouldExpand || isExpanded)) {
       // When expanding or collapsing, toggle the section
       toggleExpandReleaseVersion(item.id);
     }
   }, [isAnyContentSectionShowing, toggleInfoSection, item.id, isCollapsible, isExpanded, toggleExpandReleaseVersion]);
-  
+
   // Handle double-click - same as single click for simplicity
   const handleDoubleClick = useCallback(() => {
     handleExpandClick();
   }, [handleExpandClick]);
-    
+
   return (
     <div id={item.id} className="version-list-item">
       {/* Header row with basic information */}
@@ -158,6 +157,7 @@ const ReleaseVersionItemComponent: React.FC<ReleaseVersionItemProps> = ({
         handleGenerateReleaseNotes={handleGenerateReleaseNotes}
         progressSettings={progressSettings}
         issueStatusMap={issueStatusMap}
+        statusesLoaded={statusesLoaded}
       />
 
       {/* Expandable content section */}

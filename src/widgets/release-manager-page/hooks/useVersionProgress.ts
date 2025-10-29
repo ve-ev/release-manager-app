@@ -28,7 +28,8 @@ export function useVersionProgress(
   item: ReleaseVersion,
   progressSettings: AppSettings,
   issueStatusMap: Record<string, IssueStatus>,
-  api: API
+  api: API,
+  statusesLoaded: boolean = true // Add statusesLoaded parameter with default value
 ): UseVersionProgressReturn {
   const [mainProgress, setMainProgress] = useState<ProgressData>({
     green: 0,
@@ -37,7 +38,33 @@ export function useVersionProgress(
     grey: 0,
     total: 0
   });
-  const [mainAvailable, setMainAvailable] = useState<boolean>(false);
+  const [mainAvailable, setMainAvailable] = useState<boolean>(() => {
+    // Initialize with hasManualStatuses to ensure manual statuses are counted on init
+    // even if the release row is collapsed
+
+    // Always check for manual statuses, regardless of statusesLoaded flag
+    // This ensures manual statuses are counted on app init, even if statuses are not fully loaded yet
+
+    if (!item.plannedIssues || item.plannedIssues.length === 0) {
+      return false;
+    }
+
+    const issueIds = item.plannedIssues
+      .filter(Boolean)
+      .map(issue => issue.id)
+      .filter(Boolean);
+
+    const uniqueIds = Array.from(new Set(issueIds));
+    const nonDiscopedIds = uniqueIds.filter(id => {
+      const st = issueStatusMap[id as keyof typeof issueStatusMap] || 'Unresolved';
+      return st !== 'Discoped';
+    });
+
+    return nonDiscopedIds.some(id => {
+      const st = issueStatusMap[id as keyof typeof issueStatusMap] || 'Unresolved';
+      return st === 'Fixed' || st === 'Merged';
+    });
+  });
 
   // Memoize the issue IDs to avoid unnecessary recalculations
   const effectiveIdsRaw = useMemo(() => {
@@ -109,13 +136,15 @@ export function useVersionProgress(
 
   // Check if there are any manual statuses (Fixed/Merged) that should be counted
   const hasManualStatuses = useMemo(() => {
+    // Always check for manual statuses, regardless of statusesLoaded flag
+    // This ensures manual statuses are counted on app init, even if statuses are not fully loaded yet
     return filteredIds.some(id => {
       const st = issueStatusMap[id as keyof typeof issueStatusMap] || 'Unresolved';
       return st === 'Fixed' || st === 'Merged';
     });
   }, [filteredIds, issueStatusMap]);
 
-  // Set mainAvailable to true if there are manual statuses, even before the effect runs
+  // Update mainAvailable if manual statuses change after initialization
   useEffect(() => {
     if (hasManualStatuses) {
       setMainAvailable(true);
@@ -128,6 +157,12 @@ export function useVersionProgress(
     if (filteredIds.length === 0) {
       setMainProgress({ green: 0, yellow: 0, red: 0, grey: 0, total: 0 });
       setMainAvailable(false);
+      return;
+    }
+
+    // If statuses are not loaded yet, don't calculate progress
+    // This prevents race conditions with internal components
+    if (!statusesLoaded && !hasManualStatuses) {
       return;
     }
 
@@ -151,7 +186,9 @@ export function useVersionProgress(
 
         // Step 4: Process results
         const initial = { green: 0, yellow: 0, red: 0, grey: 0, total: 0 };
-        let mainAny = hasManualStatuses; // Initialize with hasManualStatuses to count manual statuses on init
+        // Always use the memoized hasManualStatuses value to ensure manual statuses are counted
+        // regardless of statusesLoaded flag, consistent with the initialization logic
+        let mainAny = hasManualStatuses;
 
         // eslint-disable-next-line complexity
         const processedResults = filteredIds.map((id: string) => {
@@ -333,7 +370,7 @@ export function useVersionProgress(
 
     fetchIssueData();
     // Include all memoized values in dependencies to ensure effect only runs when inputs change
-  }, [filteredIds, idToIssue, allIssueIdsToFetch, progressSettings, api, hasManualStatuses, issueStatusMap]);
+  }, [filteredIds, idToIssue, allIssueIdsToFetch, progressSettings, api, hasManualStatuses, issueStatusMap, statusesLoaded]);
 
   return {
     mainProgress,

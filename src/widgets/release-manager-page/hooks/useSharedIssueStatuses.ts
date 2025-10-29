@@ -5,9 +5,12 @@ import type {IssueStatus, TestStatus} from './useIssueStatuses';
 // Shared state for issue statuses across all hook instances
 let globalIssueStatusMap: Record<string, IssueStatus> = {};
 let globalIssueTestStatusMap: Record<string, TestStatus> = {};
+// Initialize as false - will be set to true only after successful data fetch
 let globalStatusesLoaded = false;
 let isInitialFetchInProgress = false;
 let lastFetchTime = 0;
+// Track if we've attempted a fetch at least once
+let hasAttemptedFetch = false;
 const FETCH_DEBOUNCE_MS = 1000; // Prevent multiple fetches within 1 second
 const DEFAULT_POLL_INTERVAL = 5000; // 5 seconds
 
@@ -25,6 +28,7 @@ export function useSharedIssueStatuses(
   issueStatusMap: Record<string, IssueStatus>;
   issueTestStatusMap: Record<string, TestStatus>;
   statusesLoaded: boolean;
+  hasAttemptedFetch: boolean; // Flag indicating if we've attempted to fetch
   setIssueStatus: (id: string, status: IssueStatus) => Promise<void>;
   setTestStatus: (id: string, status: TestStatus) => Promise<void>;
 } {
@@ -33,12 +37,23 @@ export function useSharedIssueStatuses(
 
   // Function to check if fetch is needed
   const shouldFetch = (): boolean => {
+    // Don't fetch if another fetch is already in progress
+    if (isInitialFetchInProgress) {
+      return false;
+    }
+
+    // Respect debounce period to prevent API hammering
     const now = Date.now();
     if (now - lastFetchTime < FETCH_DEBOUNCE_MS) {
       return false;
     }
 
-    return !isInitialFetchInProgress;
+    // If we pass the checks above, we should fetch
+    // This includes:
+    // 1. Initial fetch (hasAttemptedFetch is false)
+    // 2. Polling (globalStatusesLoaded is true)
+    // 3. Retry after failure (hasAttemptedFetch is true but globalStatusesLoaded is false)
+    return true;
   };
 
   // Function to update global state with new data
@@ -69,6 +84,8 @@ export function useSharedIssueStatuses(
 
     isInitialFetchInProgress = true;
     lastFetchTime = Date.now();
+    // Mark that we've attempted a fetch, even if it fails
+    hasAttemptedFetch = true;
 
     try {
       const { issueStatuses, testStatuses } = await api.getIssueStatuses();
@@ -78,17 +95,19 @@ export function useSharedIssueStatuses(
 
       const { hasIssueChanges, hasTestChanges } = updateGlobalState(castIssue, castTest);
 
-      globalStatusesLoaded = true;
+      // Only set to true if we actually got data
+      const hasData = Object.keys(castIssue).length > 0 || Object.keys(castTest).length > 0;
+      globalStatusesLoaded = hasData;
 
-      // Notify all listeners if there were changes
-      if (hasIssueChanges || hasTestChanges) {
+      // Notify all listeners if there were changes or if status loaded state changed
+      if (hasIssueChanges || hasTestChanges || hasData) {
         listeners.forEach(listener => listener());
       }
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('Failed to load issue statuses', e as Error);
-      // Even if failed, avoid indefinite hidden state
-      globalStatusesLoaded = true;
+      // Don't set globalStatusesLoaded to true on error - we'll retry
+      // This prevents showing empty progress bars when the API fails
     } finally {
       isInitialFetchInProgress = false;
     }
@@ -104,12 +123,13 @@ export function useSharedIssueStatuses(
 
     listeners.add(listener);
 
-    // Initial fetch if not already loaded
-    if (!globalStatusesLoaded && !isInitialFetchInProgress) {
+    // Initial fetch if we haven't attempted one yet or if we need to retry
+    // This ensures we only try to fetch once, even if multiple components mount at the same time
+    if ((!hasAttemptedFetch || !globalStatusesLoaded) && !isInitialFetchInProgress) {
       fetchAndApply();
     }
 
-    // Set up polling
+    // Set up polling - this will retry failed fetches and keep data in sync
     const interval = window.setInterval(fetchAndApply, pollInterval);
 
     // Immediate refresh when someone updates in this or another tab
@@ -173,6 +193,7 @@ export function useSharedIssueStatuses(
     issueStatusMap: globalIssueStatusMap,
     issueTestStatusMap: globalIssueTestStatusMap,
     statusesLoaded: globalStatusesLoaded,
+    hasAttemptedFetch, // Add flag to indicate if we've attempted to fetch
     setIssueStatus,
     setTestStatus
   };

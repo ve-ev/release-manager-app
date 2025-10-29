@@ -62,6 +62,8 @@ export interface VersionItemHeaderProps {
   progressSettings?: AppSettings;
   /** Issue status map (passed from parent to avoid duplicate hook instances) */
   issueStatusMap: Record<string, IssueStatus>;
+  /** Whether issue statuses are loaded */
+  statusesLoaded?: boolean;
 }
 
 /**
@@ -83,12 +85,12 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
   showProgressColumn = true,
   canEdit,
   canDelete,
-  manualIssueManagement,
   metaIssuesEnabled,
   handleAddMetaIssue,
   handleGenerateReleaseNotes,
   progressSettings,
-  issueStatusMap
+  issueStatusMap,
+  statusesLoaded = true
 }) => {
   // Memoize empty progressSettings to prevent unnecessary re-renders
   const effectiveProgressSettings = useMemo(() => progressSettings || {
@@ -99,7 +101,7 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
   }, [progressSettings]);
 
   // Use progress calculation hook (issueStatusMap passed from parent)
-  const { mainProgress, mainAvailable } = useVersionProgress(item, effectiveProgressSettings, issueStatusMap, api);
+  const { mainProgress, mainAvailable } = useVersionProgress(item, effectiveProgressSettings, issueStatusMap, api, statusesLoaded);
 
   // Configure dropdown menu props (untyped to avoid generic mismatch)
   const menuProps = useMemo(() => ({
@@ -114,12 +116,12 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
     if (item.status === newStatus) {
       return;
     }
-    
+
     api.updateReleaseVersion({ ...item, status: newStatus })
       .then(() => {
         // Dispatch targeted update to avoid full table refresh
-        window.dispatchEvent(new CustomEvent('release-version-status-updated', { 
-          detail: { id: item.id, status: newStatus } 
+        window.dispatchEvent(new CustomEvent('release-version-status-updated', {
+          detail: { id: item.id, status: newStatus }
         }));
         // Keep legacy event for backward compatibility
         window.dispatchEvent(new Event('release-versions-updated'));
@@ -185,8 +187,8 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
 
   // Calculate if freeze confirmation should be shown
   const showConfirmFreeze = useMemo(() => {
-    return (item.featureFreezeDate && 
-      (isToday(item.featureFreezeDate) || isExpired(item.featureFreezeDate))) && 
+    return (item.featureFreezeDate &&
+      (isToday(item.featureFreezeDate) || isExpired(item.featureFreezeDate))) &&
       !item.freezeConfirmed;
   }, [item.featureFreezeDate, item.freezeConfirmed]);
 
@@ -204,26 +206,26 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
   // Memoize actions dropdown menu items
   const actionsMenuItems = useMemo(() => {
     const items: Array<ListDataItem<unknown>> = [];
-    
+
     if (canEdit) {
       items.push(createMenuItem('Edit', handleEditClick, 'edit-action'));
 
       if (metaIssuesEnabled) {
         items.push(createMenuItem('Add Meta Issue', handleAddMetaIssueClick, 'add-meta-issue-action'));
       }
-        
+
       if (showConfirmFreeze) {
         items.push(createMenuItem('Confirm Freeze', handleConfirmFreeze, 'confirm-freeze-action'));
       }
     }
-    
+
     // Always available: Generate Release Notes action
     items.push(createMenuItem('Generate Release Notes', handleGenerateNotesClick, 'generate-release-notes-action'));
 
     if (canDelete) {
       items.push(createMenuItem('Delete', handleDeleteClick, 'delete-action'));
     }
-    
+
     return items;
   }, [
     canEdit,

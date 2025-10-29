@@ -33,6 +33,7 @@ export function useIssueStatuses(
     issueStatusMap: sharedIssueStatusMap,
     issueTestStatusMap: sharedIssueTestStatusMap,
     statusesLoaded: sharedStatusesLoaded,
+    hasAttemptedFetch, // Get the flag indicating if we've attempted to fetch
     setIssueStatus: sharedSetIssueStatus,
     setTestStatus: sharedSetTestStatus
   } = useSharedIssueStatuses(api, pollInterval);
@@ -60,8 +61,13 @@ export function useIssueStatuses(
     ...sharedIssueTestStatusMap
   };
 
-  // Determine if statuses are loaded based on manual management setting
-  const statusesLoaded = manualIssueManagement ? sharedStatusesLoaded : localStatusesLoaded;
+  // Determine if statuses are loaded based on manual management setting and fetch attempts
+  // If manual management is enabled, we need to check both if we've attempted a fetch and if the statuses are loaded
+  // If we haven't attempted a fetch yet, statuses are definitely not loaded
+  // If we have attempted a fetch, use the shared status loaded flag
+  const statusesLoaded = manualIssueManagement
+    ? (hasAttemptedFetch && sharedStatusesLoaded)
+    : localStatusesLoaded;
 
   // Wrapper for setIssueStatus that uses the shared implementation
   const setIssueStatus = useCallback((id: string, status: IssueStatus) => {
