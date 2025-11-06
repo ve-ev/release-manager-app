@@ -19,6 +19,12 @@ export interface AppSettings {
   redColor?: string;
   greyColor?: string;
   products?: Array<{ id: string; name: string; color?: string }>
+  // Custom Field Mapping feature config
+  customFieldMapping?: {
+    plannedReleaseField?: string; // name or ID
+    releasedField?: string; // name or ID
+    valueTemplate?: string; // default: ${version}
+  }
 }
 
 /**

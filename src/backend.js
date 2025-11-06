@@ -174,6 +174,7 @@ exports.httpHandler = {
                     ctx.response.json({
                         manualIssueManagement: settings.manualIssueManagement || false,
                         metaIssuesEnabled: settings.metaIssuesEnabled || false,
+                        customFieldsMapping: settings.customFieldsMapping || false,
                     });
                 } catch (error) {
                     logError('Failed to get ff', error);
@@ -221,6 +222,7 @@ exports.httpHandler = {
             method: 'GET',
             path: 'app-settings',
             scope: 'project',
+            // eslint-disable-next-line complexity
             handle: function handle(ctx) {
                 try {
                     // Return the progress settings (renamed endpoint)
@@ -453,6 +455,7 @@ exports.httpHandler = {
             method: 'GET',
             path: 'issue-statuses',
             scope: 'project',
+            // eslint-disable-next-line complexity
             handle: function handle(ctx) {
                 try {
                     // Try project-scoped storage first
@@ -480,6 +483,7 @@ exports.httpHandler = {
             method: 'PUT',
             path: 'issue-status',
             scope: 'project',
+            // eslint-disable-next-line complexity
             handle: function handle(ctx) {
                 try {
                     const body = ctx.request.json();
@@ -520,6 +524,7 @@ exports.httpHandler = {
             method: 'PUT',
             path: 'issue-test-status',
             scope: 'project',
+            // eslint-disable-next-line complexity
             handle: function handle(ctx) {
                 try {
                     const body = ctx.request.json();
@@ -572,6 +577,7 @@ exports.httpHandler = {
             method: 'PUT',
             path: 'expanded-version',
             scope: 'project',
+            // eslint-disable-next-line complexity
             handle: function handle(ctx) {
                 try {
                     const body = ctx.request.json();

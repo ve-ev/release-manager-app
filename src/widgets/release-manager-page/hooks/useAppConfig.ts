@@ -8,6 +8,10 @@ interface AppConfig {
     customFieldsMapping: boolean;
 }
 
+// --- Module-level cache to ensure the config is fetched only once per session ---
+let cachedAppConfig: AppConfig | null = null;
+let inFlightPromise: Promise<AppConfig> | null = null;
+
 /**
  * Custom hook to load application configuration
  */
@@ -23,23 +27,43 @@ export function useAppConfig(api: API) {
 
         const loadConfig = async () => {
             try {
-                const appConfig = await api.getConfig();
-                if (!isMounted) {
-                    return
+                // If cached, use it and return immediately
+                if (cachedAppConfig) {
+                    if (isMounted) {
+                        setConfig(cachedAppConfig);
+                    }
+                    return;
                 }
 
-                const manualIssueManagement = appConfig.manualIssueManagement as boolean;
-                const metaIssuesEnabled = (appConfig as unknown as {
-                    metaIssuesEnabled?: boolean
-                }).metaIssuesEnabled as boolean;
-                const customFieldsMapping = (appConfig as unknown as {
-                    customFieldsMapping?: boolean
-                }).customFieldsMapping as boolean;
-                setConfig({
-                    manualIssueManagement: manualIssueManagement,
-                    metaIssuesEnabled: metaIssuesEnabled,
-                    customFieldsMapping: customFieldsMapping
-                });
+                // If there is an in-flight request, await it
+                if (inFlightPromise) {
+                    const cfg = await inFlightPromise;
+                    if (isMounted) {
+                        setConfig(cfg);
+                    }
+                    return;
+                }
+
+                // Otherwise, start a new request and cache it
+                inFlightPromise = (async () => {
+                    const appConfig = await api.getConfig();
+                    const manualIssueManagement = appConfig.manualIssueManagement as boolean;
+                    const metaIssuesEnabled = (appConfig as unknown as { metaIssuesEnabled?: boolean }).metaIssuesEnabled as boolean;
+                    const customFieldsMapping = (appConfig as unknown as { customFieldsMapping?: boolean }).customFieldsMapping as boolean;
+                    const cfg: AppConfig = {
+                        manualIssueManagement,
+                        metaIssuesEnabled,
+                        customFieldsMapping
+                    };
+                    cachedAppConfig = cfg;
+                    return cfg;
+                })();
+
+                const resolved = await inFlightPromise;
+                if (!isMounted) {
+                    return;
+                }
+                setConfig(resolved);
             } catch (error) {
                 logger.error('Failed to load app config:', error);
             }
