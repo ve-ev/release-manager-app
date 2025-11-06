@@ -139,12 +139,12 @@ const AddIssueDialog: React.FC<AddIssueDialogProps> = ({
             <Button onClick={onClose}>Close</Button>
           </div>
         </div>
-        <ButtonGroup className="type-toggle" aria-label="Issue type toggle">
-          <Button primary={mode === 'existing'} onClick={() => setMode('existing')}>Existing</Button>
-          {metaIssuesEnabled && (
-          <Button primary={mode === 'meta'} onClick={() => setMode('meta')}>Meta</Button>
-              )}
-        </ButtonGroup>
+        {metaIssuesEnabled && (
+          <ButtonGroup className="type-toggle" aria-label="Issue type toggle">
+            <Button primary={mode === 'existing'} onClick={() => setMode('existing')}>Existing</Button>
+            <Button primary={mode === 'meta'} onClick={() => setMode('meta')}>Meta</Button>
+          </ButtonGroup>
+        )}
         <div className="add-issue-container" style={{ padding: 12 }}>
           {/* EXISTING: copy of FormFields -> PlannedIssues usage */}
           <div style={{ display: mode === 'existing' ? 'block' : 'none' }}>

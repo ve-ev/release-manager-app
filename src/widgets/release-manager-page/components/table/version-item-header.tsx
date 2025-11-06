@@ -85,7 +85,6 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
   showProgressColumn = true,
   canEdit,
   canDelete,
-  metaIssuesEnabled,
   handleAddMetaIssue,
   handleGenerateReleaseNotes,
   progressSettings,
@@ -211,10 +210,10 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
     if (canEdit) {
       items.push(createMenuItem('Edit', handleEditClick, 'edit-action'));
 
-      if (metaIssuesEnabled) {
-        // Transform action to generic "Add Issue" entry point
-        items.push(createMenuItem('Add Issue', handleAddMetaIssueClick, 'add-issue-action'));
-      }
+      // Always allow adding issues regardless of meta-issue feature flag.
+      // When metaIssuesEnabled is false, the AddIssueDialog will hide the Meta tab
+      // and allow adding only existing issues.
+      items.push(createMenuItem('Add Issue', handleAddMetaIssueClick, 'add-issue-action'));
 
       if (showConfirmFreeze) {
         items.push(createMenuItem('Confirm Freeze', handleConfirmFreeze, 'confirm-freeze-action'));
@@ -229,18 +228,7 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
     }
 
     return items;
-  }, [
-    canEdit,
-    canDelete,
-    metaIssuesEnabled,
-    showConfirmFreeze,
-    createMenuItem,
-    handleEditClick,
-    handleAddMetaIssueClick,
-    handleConfirmFreeze,
-    handleGenerateNotesClick,
-    handleDeleteClick
-  ]);
+  }, [canEdit, canDelete, showConfirmFreeze, createMenuItem, handleEditClick, handleAddMetaIssueClick, handleConfirmFreeze, handleGenerateNotesClick, handleDeleteClick]);
 
   // Memoize status tag element
   const statusTagElement = useMemo(() => (
