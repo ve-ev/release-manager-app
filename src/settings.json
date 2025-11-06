@@ -27,8 +27,13 @@
       "type": "boolean"
     },
     "metaIssuesEnabled" : {
-      "title": "Allow to create meta-issue for showing in release version",
+      "title": "Meta Issues Feature",
+      "description": "Allow to create meta-issue for showing in release version",
       "type": "boolean"
+    },
+    "customFieldsMapping" : {
+      "title": "Custom Fields Mapping Feature",
+      "description": "Allow to mapping existing enum/build custom fields to set release version"
     }
   },
   "required": ["releaseManagers"]
