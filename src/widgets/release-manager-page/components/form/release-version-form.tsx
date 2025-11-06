@@ -72,7 +72,7 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
   const [linkedIssuesInput, setLinkedIssuesInput] = useState('');
   const [showMetaIssueForm, setShowMetaIssueForm] = useState<boolean>(!!initialShowMetaIssueForm);
   const [editMetaIndex, setEditMetaIndex] = useState<number | null>(null);
-  
+
   // Use custom hook for issue search functionality
   const { isLoadingIssues, searchError, searchIssues, setSearchError } = useIssueSearch(host);
 
@@ -156,7 +156,7 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
   const handleSearchIssues = useCallback(async () => {
     const existingIssues = (formData.plannedIssues || []) as Array<{id: string; idReadable?: string; summary: string}>;
     const uniqueIssues = await searchIssues(linkedIssuesInput, existingIssues);
-    
+
     if (uniqueIssues.length > 0) {
       setFormData(prev => ({
         ...prev,
@@ -176,11 +176,12 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
     }
   }, [formData]);
 
+
   // Handle saving meta issue data
   const handleMetaIssueSave = useCallback(async (meta: MetaIssueData) => {
     // Prepare updated planned issues array
     let updatedPlannedIssues: PlannedOrMetaIssue[] = [];
-    
+
     if (editMetaIndex !== null && formData.plannedIssues && formData.plannedIssues[editMetaIndex]) {
       const updated = [...(formData.plannedIssues || [])];
       const existing = updated[editMetaIndex];

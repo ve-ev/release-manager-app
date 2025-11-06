@@ -212,7 +212,8 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
       items.push(createMenuItem('Edit', handleEditClick, 'edit-action'));
 
       if (metaIssuesEnabled) {
-        items.push(createMenuItem('Add Meta Issue', handleAddMetaIssueClick, 'add-meta-issue-action'));
+        // Transform action to generic "Add Issue" entry point
+        items.push(createMenuItem('Add Issue', handleAddMetaIssueClick, 'add-issue-action'));
       }
 
       if (showConfirmFreeze) {

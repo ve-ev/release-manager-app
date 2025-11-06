@@ -10,6 +10,7 @@ import {ReleaseVersion} from './interfaces';
 import SettingsForm from './components/settings/settings-form.tsx';
 import {VersionTable} from './components/table/version-table.tsx';
 import ReleaseNotesDialog from './components/release-notes-dialog.tsx';
+import AddIssueDialog from './components/add-issue-dialog.tsx';
 import {generateReleaseNotesMarkdown} from './utils/release-notes-utils.ts';
 import {EmptyState} from './components/empty-state.tsx';
 import {ErrorBoundary} from './components/error-boundary.tsx';
@@ -22,7 +23,8 @@ import {
   usePermissions,
   useExpandedState,
   useSettingsData,
-  useProgressSettings
+  useProgressSettings,
+  useIssueSearch
 } from './hooks';
 /* eslint-disable complexity */
 
@@ -39,19 +41,24 @@ const AppComponent: React.FunctionComponent = () => {
   const config = useAppConfig(api);
   const permissions = usePermissions(api);
   const { expandedReleaseVersions, toggleExpandReleaseVersion } = useExpandedState(api);
-  
+
   // OPTIMIZATION: Load settings ONCE at app level instead of in every component
   // This prevents creating 100+ hook instances when rendering 100 release versions
   const { settings } = useSettingsData(api);
   const { progressSettings } = useProgressSettings(api);
-  
+  const { isLoadingIssues: isSearchingIssues, searchError: issueSearchError, searchIssues } = useIssueSearch(host);
+  const searchAndResolveCb = useCallback(
+    (q: string, existing: Array<{id: string; idReadable?: string; summary: string}>) => searchIssues(q, existing),
+    [searchIssues]
+  );
+
   // Derive visibility flags directly from loaded settings (eliminates redundant API call)
-  const hasProducts = useMemo(() => 
-    Boolean(settings.products && settings.products.length > 0), 
+  const hasProducts = useMemo(() =>
+    Boolean(settings.products && settings.products.length > 0),
     [settings.products]
   );
-  const hasProgress = useMemo(() => 
-    Boolean(progressSettings.customFieldNames && progressSettings.customFieldNames.length > 0), 
+  const hasProgress = useMemo(() =>
+    Boolean(progressSettings.customFieldNames && progressSettings.customFieldNames.length > 0),
     [progressSettings.customFieldNames]
   );
 
@@ -62,10 +69,12 @@ const AppComponent: React.FunctionComponent = () => {
   const [initialShowMetaIssueForm, setInitialShowMetaIssueForm] = useState<boolean>(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  
+
   // Release notes dialog state
   const [showReleaseNotesDialog, setShowReleaseNotesDialog] = useState<boolean>(false);
   const [releaseNotesText, setReleaseNotesText] = useState<string>('');
+  const [showAddIssueDialog, setShowAddIssueDialog] = useState<boolean>(false);
+  const [activeItemForAddIssue, setActiveItemForAddIssue] = useState<ReleaseVersion | null>(null);
 
   // Handle creating or updating a release version
   const handleSaveReleaseVersion = useCallback(async (releaseVersion: ReleaseVersion) => {
@@ -79,7 +88,7 @@ const AppComponent: React.FunctionComponent = () => {
         await api.createReleaseVersion(releaseVersion);
         setAlertMessage('Release version created successfully');
       }
-      
+
       // Refresh release versions and close form
       await fetchReleaseVersions();
       setShowForm(false);
@@ -104,7 +113,7 @@ const AppComponent: React.FunctionComponent = () => {
     if (!confirmDeleteId) {
       return;
     }
-    
+
     try {
       await api.deleteReleaseVersion(confirmDeleteId);
       setAlertMessage('Release version deleted successfully');
@@ -153,12 +162,29 @@ const AppComponent: React.FunctionComponent = () => {
     setShowForm(true);
   }, []);
 
-  // Handle open meta issue form
+  // Handle generic "Add Issue" action from Actions menu.
+  // Open the Edit form with the new Add Issue selector visible (do NOT auto-open Meta form).
   const handleAddMetaIssue = useCallback((releaseVersion: ReleaseVersion) => {
-    setCurrentReleaseVersion(releaseVersion);
-    setInitialShowMetaIssueForm(true);
-    setShowForm(true);
+    // Open dedicated Add Issue dialog instead of full edit form
+    setActiveItemForAddIssue(releaseVersion);
+    setShowAddIssueDialog(true);
   }, []);
+
+  const handleAddIssueDialogClose = useCallback(() => {
+    setShowAddIssueDialog(false);
+    setActiveItemForAddIssue(null);
+  }, []);
+
+  const handleAddIssueDialogSave = useCallback(async (updated: ReleaseVersion) => {
+    // Update the release, but keep the dialog open to allow multiple operations
+    try {
+      await api.updateReleaseVersion(updated);
+      await fetchReleaseVersions();
+    } catch (e) {
+      logger.error('Failed to update release version while adding/removing issue', e);
+      setAlertMessage('Failed to update planned issues');
+    }
+  }, [fetchReleaseVersions]);
 
   // Handle canceling the form
   const handleCancelForm = useCallback(() => {
@@ -166,7 +192,7 @@ const AppComponent: React.FunctionComponent = () => {
     setCurrentReleaseVersion(undefined);
     setInitialShowMetaIssueForm(false);
   }, []);
-  
+
   // Memoize empty state check
   const isEmptyHeader = useMemo(
     () => !releaseVersions || releaseVersions.length === 0,
@@ -188,26 +214,28 @@ const AppComponent: React.FunctionComponent = () => {
     }
 
     return (
-      <VersionTable
-        releaseVersions={releaseVersions}
-        loading={loading}
-        error={error}
-        expandedReleaseVersions={expandedReleaseVersions}
-        toggleExpandReleaseVersion={toggleExpandReleaseVersion}
-        handleEditReleaseVersion={handleEditReleaseVersion}
-        handleConfirmDelete={handleConfirmDelete}
-        showProductColumn={hasProducts}
-        showProgressColumn={hasProgress}
-        host={host}
-        canEdit={permissions.canEdit}
-        canDelete={permissions.canDelete}
-        manualIssueManagement={config.manualIssueManagement}
-        metaIssuesEnabled={config.metaIssuesEnabled}
-        handleAddMetaIssue={handleAddMetaIssue}
-        handleGenerateReleaseNotes={handleGenerateReleaseNotes}
-        settings={settings}
-        progressSettings={progressSettings}
-      />
+      <div>
+        <VersionTable
+          releaseVersions={releaseVersions}
+          loading={loading}
+          error={error}
+          expandedReleaseVersions={expandedReleaseVersions}
+          toggleExpandReleaseVersion={toggleExpandReleaseVersion}
+          handleEditReleaseVersion={handleEditReleaseVersion}
+          handleConfirmDelete={handleConfirmDelete}
+          showProductColumn={hasProducts}
+          showProgressColumn={hasProgress}
+          host={host}
+          canEdit={permissions.canEdit}
+          canDelete={permissions.canDelete}
+          manualIssueManagement={config.manualIssueManagement}
+          metaIssuesEnabled={config.metaIssuesEnabled}
+          handleAddMetaIssue={handleAddMetaIssue}
+          handleGenerateReleaseNotes={handleGenerateReleaseNotes}
+          settings={settings}
+          progressSettings={progressSettings}
+        />
+      </div>
     );
   }, [
     releaseVersions,
@@ -245,7 +273,7 @@ const AppComponent: React.FunctionComponent = () => {
                 <Button primary onClick={handleAddReleaseVersion}>Add Release Version</Button>
               )}
               {permissions.canAccessSettings && (
-                <Button 
+                <Button
                   className="progress-settings-button"
                   onClick={() => setShowSettings(true)}
                   title="Settings"
@@ -263,7 +291,7 @@ const AppComponent: React.FunctionComponent = () => {
       <div style={{ display: showForm ? 'none' : 'block' }}>
         {renderContent}
       </div>
-      
+
       {showForm && (
         <div className="form-container">
           <ReleaseVersionForm
@@ -308,6 +336,17 @@ const AppComponent: React.FunctionComponent = () => {
         open={showReleaseNotesDialog}
         notes={releaseNotesText}
         onClose={() => setShowReleaseNotesDialog(false)}
+      />
+
+      <AddIssueDialog
+        open={showAddIssueDialog}
+        item={activeItemForAddIssue || ({} as ReleaseVersion)}
+        onClose={handleAddIssueDialogClose}
+        onSave={handleAddIssueDialogSave}
+        isLoadingIssues={isSearchingIssues}
+        searchError={issueSearchError}
+        searchAndResolve={searchAndResolveCb}
+        metaIssuesEnabled={config.metaIssuesEnabled}
       />
 
     </div>
