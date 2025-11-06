@@ -23,16 +23,16 @@
       }
     },
     "manualIssueManagement": {
-      "title": "Manual Issue Management Feature",
+      "title": "Feature: Manual Issue Management",
       "type": "boolean"
     },
     "metaIssuesEnabled": {
-      "title": "Meta Issues Feature",
+      "title": "Feature: Meta Issues",
       "description": "Allow to create meta-issue for showing in release version",
       "type": "boolean"
     },
     "customFieldsMapping": {
-      "title": "Custom Fields Mapping Feature",
+      "title": "Feature: Custom Fields Mapping",
       "description": "Allow to mapping existing enum/build custom fields to set release version",
       "type": "boolean"
     }
