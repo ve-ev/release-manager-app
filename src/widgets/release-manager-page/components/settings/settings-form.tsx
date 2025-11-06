@@ -9,7 +9,7 @@ import { api } from '../../app';
 import '../../styles/settings.css';
 import {AppSettings} from '../../interfaces';
 import {generateColorFromString} from '../../utils/helpers';
-import {useSettingsData} from '../../hooks/useSettingsData';
+import {useSettingsData} from '../../hooks';
 import {DEFAULT_PRODUCT_COLORS} from '../../utils/constants';
 import {generateClientId} from '../../utils/id-generator';
 import {invalidateProgressCache} from '../../utils/progress-cache';
@@ -28,15 +28,15 @@ interface AppSettingsFormProps {
 export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
   // Use custom hook to fetch and manage settings data
   const { settings, setSettings, isLoading, error: loadError } = useSettingsData(api);
-  
+
   // Memoize custom field names input from settings
   const initialCustomFieldNamesInput = useMemo(() => {
     const names = Array.isArray(settings.customFieldNames) ? settings.customFieldNames : [];
     return names.join('; ');
   }, [settings.customFieldNames]);
-  
+
   const [customFieldNamesInput, setCustomFieldNamesInput] = useState<string>(initialCustomFieldNamesInput);
-  
+
   // Update customFieldNamesInput when settings are loaded
   React.useEffect(() => {
     setCustomFieldNamesInput(initialCustomFieldNamesInput);
@@ -44,10 +44,10 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
 
   // State for storing form errors
   const [errors, setErrors] = useState<string[]>([]);
-  
+
   // State for tracking saving state
   const [isSaving, setIsSaving] = useState(false);
-  
+
   // State for new value inputs
   const [newGreenValue, setNewGreenValue] = useState('');
   const [newYellowValue, setNewYellowValue] = useState('');
@@ -89,7 +89,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
     }));
     setEditProductId(null);
     setEditProductName('');
-  }, [editProductId, editProductName]);
+  }, [editProductId, editProductName, setSettings]);
 
   // Delete product locally
   const handleDeleteProduct = useCallback((id: string) => {
@@ -111,19 +111,20 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
   }, [loadError]);
 
   // Handle saving settings
+  // eslint-disable-next-line complexity
   const handleSave = useCallback(async () => {
     // Validate settings
     const validationErrors = [];
-    
+
     if (!settings.customFieldNames || settings.customFieldNames.length === 0) {
       validationErrors.push('At least one custom field name is required');
     }
-    
+
     if (validationErrors.length > 0) {
       setErrors(validationErrors);
       return;
     }
-    
+
     try {
       setIsSaving(true);
       // Prepare settings to save, applying any pending product edit
@@ -159,31 +160,31 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
     } finally {
       setIsSaving(false);
     }
-  }, [settings, editProductId, editProductName, onClose]);
+  }, [settings, editProductId, onClose, editProductName, setSettings]);
 
   // Handle adding a new value to a zone
   const handleAddValue = useCallback((zone: 'greenZoneValues' | 'yellowZoneValues' | 'redZoneValues', value: string) => {
     if (!value.trim()) {
       return;
     }
-    
+
     // Check if value already exists in any zone
     const allValues = [
       ...settings.greenZoneValues,
       ...settings.yellowZoneValues,
       ...settings.redZoneValues
     ];
-    
+
     if (allValues.includes(value)) {
       setErrors([`Value "${value}" already exists in another zone`]);
       return;
     }
-    
+
     setSettings(prev => ({
       ...prev,
       [zone]: [...prev[zone], value]
     }));
-    
+
     // Clear the input
     switch (zone) {
       case 'greenZoneValues':
@@ -199,10 +200,10 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
         // No action needed for other cases
         break;
     }
-    
+
     // Clear any errors
     setErrors([]);
-  }, [settings.greenZoneValues, settings.yellowZoneValues, settings.redZoneValues]);
+  }, [settings.greenZoneValues, settings.yellowZoneValues, settings.redZoneValues, setSettings]);
 
   // Handle removing a value from a zone
   const handleRemoveValue = useCallback((zone: 'greenZoneValues' | 'yellowZoneValues' | 'redZoneValues', value: string) => {
@@ -210,7 +211,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
       ...prev,
       [zone]: prev[zone].filter(v => v !== value)
     }));
-  }, []);
+  }, [setSettings]);
 
   // Render value tags for a zone
   const renderValueTags = useCallback((zone: 'greenZoneValues' | 'yellowZoneValues' | 'redZoneValues') => {
@@ -230,7 +231,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
       <Panel className="settings-panel">
         <H3>Progress Tracking Settings</H3>
         <br/>
-        
+
         {errors.length > 0 && (
           <div className="settings-errors">
             {errors.map((error) => (
@@ -239,7 +240,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
             ))}
           </div>
         )}
-        
+
         {isLoading ? (
           <div className="settings-loading">Loading settings...</div>
         ) : (
@@ -261,7 +262,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
                 Enter one or several custom field names to track progress. If the first field is not present, the next one will be tried. Use comma or semicolon to separate names.
               </div>
             </div>
-            
+
             <div className="settings-field">
               <div className="field-label">Green Zone Values (Completed)</div>
               <div className="zone-values">
@@ -281,7 +282,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
                 </Button>
               </div>
             </div>
-            
+
             <div className="settings-field">
               <div className="field-label">Yellow Zone Values (In Progress)</div>
               <div className="zone-values">
@@ -301,7 +302,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
                 </Button>
               </div>
             </div>
-            
+
             <div className="settings-field">
               <div className="field-label">Red Zone Values (Blocked)</div>
               <div className="zone-values">
@@ -321,8 +322,8 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
                 </Button>
               </div>
             </div>
-            
-            
+
+
             <div className="settings-field">
               <H3>Products</H3>
               {(settings.products || []).length === 0 ? (

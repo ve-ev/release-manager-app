@@ -95,6 +95,7 @@ const AppComponent: React.FunctionComponent = () => {
       setCurrentReleaseVersion(undefined);
       // Important: reset meta-issue auto-open flag after save to avoid leaking into next form opening
       setInitialShowMetaIssueForm(false);
+    // eslint-disable-next-line no-catch-shadow,no-shadow
     } catch (error) {
       logger.error('Failed to save release version:', error);
       setAlertMessage('Failed to save release version. Please try again.');
@@ -118,6 +119,7 @@ const AppComponent: React.FunctionComponent = () => {
       await api.deleteReleaseVersion(confirmDeleteId);
       setAlertMessage('Release version deleted successfully');
       await fetchReleaseVersions();
+    // eslint-disable-next-line no-catch-shadow,no-shadow
     } catch (error) {
       // Show error as alert message instead of setting error state
       setAlertMessage('Failed to delete release version');
@@ -142,6 +144,7 @@ const AppComponent: React.FunctionComponent = () => {
         setReleaseNotesText(md);
       }
       setShowReleaseNotesDialog(true);
+    // eslint-disable-next-line no-catch-shadow,no-shadow
     } catch (error) {
       logger.error('Failed to generate release notes:', error);
       setAlertMessage('Failed to generate release notes');
@@ -267,7 +270,7 @@ const AppComponent: React.FunctionComponent = () => {
       <div className="header">
         {!showEmpty && <H1>Release Management</H1>}
         <div className="header-actions">
-          {!showForm && (
+          {!showForm && !showSettings && (
             <>
               {permissions.canCreate && !showEmpty && (
                 <Button primary onClick={handleAddReleaseVersion}>Add Release Version</Button>
@@ -287,8 +290,8 @@ const AppComponent: React.FunctionComponent = () => {
         </div>
       </div>
 
-      {/* Keep content mounted but hide it when form is open to avoid unmount/remount cycle */}
-      <div style={{ display: showForm ? 'none' : 'block' }}>
+      {/* Keep content mounted but hide it when form(s) are open to avoid unmount/remount cycle */}
+      <div style={{ display: (showForm || showSettings) ? 'none' : 'block' }}>
         {renderContent}
       </div>
 
@@ -327,9 +330,11 @@ const AppComponent: React.FunctionComponent = () => {
       )}
 
       {showSettings && permissions.canAccessSettings && (
-        <SettingsForm
-          onClose={() => setShowSettings(false)}
-        />
+        <div className="form-container">
+          <SettingsForm
+            onClose={() => setShowSettings(false)}
+          />
+        </div>
       )}
 
       <ReleaseNotesDialog
@@ -356,7 +361,7 @@ const AppComponent: React.FunctionComponent = () => {
 // Wrap with ErrorBoundary for graceful error handling
 const AppWithErrorBoundary = memo(() => (
   <ErrorBoundary>
-    <AppComponent />
+    <AppComponent/>
   </ErrorBoundary>
 ));
 
