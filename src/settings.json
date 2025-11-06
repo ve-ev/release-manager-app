@@ -4,7 +4,7 @@
   "title": "Release Manager Settings",
   "description": "App settings stored per project",
   "properties": {
-    "releaseManagers" : {
+    "releaseManagers": {
       "title": "Release managers",
       "description": "Administration role",
       "type": "array",
@@ -13,7 +13,7 @@
         "type": "object"
       }
     },
-    "lightManagers" : {
+    "lightManagers": {
       "title": "Light Release Managers",
       "description": "User role with option to edit already existing release versions",
       "type": "array",
@@ -22,19 +22,22 @@
         "type": "object"
       }
     },
-    "manualIssueManagement" : {
+    "manualIssueManagement": {
       "title": "Manual Issue Management Feature",
       "type": "boolean"
     },
-    "metaIssuesEnabled" : {
+    "metaIssuesEnabled": {
       "title": "Meta Issues Feature",
       "description": "Allow to create meta-issue for showing in release version",
       "type": "boolean"
     },
-    "customFieldsMapping" : {
+    "customFieldsMapping": {
       "title": "Custom Fields Mapping Feature",
-      "description": "Allow to mapping existing enum/build custom fields to set release version"
+      "description": "Allow to mapping existing enum/build custom fields to set release version",
+      "type": "boolean"
     }
   },
-  "required": ["releaseManagers"]
+  "required": [
+    "releaseManagers"
+  ]
 }
