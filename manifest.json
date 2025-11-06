@@ -3,8 +3,8 @@
   "title": "Release Manager",
   "description": "Plan, track, and communicate product releases with version management, progress tracking, and release notes generation.",
   "$schema": "https://json.schemastore.org/youtrack-app.json",
-  "version": "1.1.1",
-  "changeNotes": "<h3>Hotfix 1.1.1 — October 29, 2025</h3>\n<ul>\n    <li><b>Fix:</b>Fixed the logic that treated an empty successful response from `backend/issue-statuses` as “not loaded”</li>\n</ul>\n<h3>What's New in 1.1.0</h3>\n<ul>\n    <li><b>Performance Improvements:</b> Optimized issue status requests and fixed race conditions when loading issue statuses</li>\n    <li><b>UI Enhancements:</b> Fixed list re-rendering issues when updating statuses</li>\n    <li><b>Bug Fixes:</b> Resolved issue with manual status counting during application initialization</li>\n    <li><b>Code Refactoring:</b> Improved code structure and maintainability</li>\n</ul>",
+  "version": "1.1.2",
+  "changeNotes": "<h3>Version 1.1.2 </h3>\n<ul>\n    <li><b>Feature:</b> Generic Add Issue Action</li>\n</ul>\n<h3>Hotfix 1.1.1 — October 29, 2025</h3>\n<ul>\n    <li><b>Fix:</b>Fixed the logic that treated an empty successful response from `backend/issue-statuses` as “not loaded”</li>\n</ul>\n<h3>What's New in 1.1.0</h3>\n<ul>\n    <li><b>Performance Improvements:</b> Optimized issue status requests and fixed race conditions when loading issue statuses</li>\n    <li><b>UI Enhancements:</b> Fixed list re-rendering issues when updating statuses</li>\n    <li><b>Bug Fixes:</b> Resolved issue with manual status counting during application initialization</li>\n    <li><b>Code Refactoring:</b> Improved code structure and maintainability</li>\n</ul>",
   "vendor": {
     "name": "E.V",
     "url": "https://github.com/ve-ev/release-manager-app"
