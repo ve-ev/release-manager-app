@@ -183,11 +183,25 @@ const AppComponent: React.FunctionComponent = () => {
     try {
       await api.updateReleaseVersion(updated);
       await fetchReleaseVersions();
+
+      // After adding issues, optionally set a custom field on those newly added issues
+      const plannedReleaseField = settings.customFieldMapping?.plannedReleaseField;
+      if (plannedReleaseField) {
+        const prevIds = new Set((activeItemForAddIssue?.plannedIssues || []).map(it => it.id));
+        const newlyAdded = (updated.plannedIssues || []).filter(it => !it.isMeta && !prevIds.has(it.id));
+
+        if (newlyAdded.length > 0) {
+          const valueTemplate = settings.customFieldMapping?.valueTemplate || '${version}';
+          const fieldValue = valueTemplate.replace('${version}', updated.version || '');
+          // Fire and forget; errors are logged but do not interrupt UX
+          await Promise.all(newlyAdded.map(it => api.setIssueCustomField(it.id, plannedReleaseField, fieldValue).catch(err => logger.error('Failed to set custom field for issue', it.id, err))));
+        }
+      }
     } catch (e) {
       logger.error('Failed to update release version while adding/removing issue', e);
       setAlertMessage('Failed to update planned issues');
     }
-  }, [fetchReleaseVersions]);
+  }, [fetchReleaseVersions, settings.customFieldMapping?.plannedReleaseField, settings.customFieldMapping?.valueTemplate, activeItemForAddIssue]);
 
   // Handle canceling the form
   const handleCancelForm = useCallback(() => {

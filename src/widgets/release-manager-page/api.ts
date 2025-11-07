@@ -51,13 +51,13 @@ export class API {
   /**
    * Batch fetch bulk field values for multiple issues at once.
    * This is much more efficient than calling getIssueFieldBulkForFirstAvailable in a loop.
-   * 
+   *
    * @param issueIds - Array of issue IDs to fetch
    * @param fieldNames - Array of field names to try (in order)
    * @returns Map of issueId -> { items, usedField }
    */
   async getIssueFieldBulkBatch(
-    issueIds: string[], 
+    issueIds: string[],
     fieldNames: string[]
   ): Promise<Record<string, { items: Array<{ id: string; value: string | null }>; usedField?: string }>> {
     // Validate both arrays before making API call
@@ -166,7 +166,7 @@ export class API {
     if (!releaseVersion.id) {
       throw new Error('Release version ID is required for update');
     }
-    
+
     return this.host.fetchApp(`backend/release?id=${releaseVersion.id}`, {
       method: 'PUT',
       body: releaseVersion,
@@ -237,6 +237,13 @@ export class API {
       method: 'PUT',
       body: { expandedVersion },
       scope: true
+    });
+  }
+
+  async setIssueCustomField(issueId: string, fieldName: string, value: string): Promise<{ success: boolean; resolvedName?: string }>{
+    return this.fetchJson<{ success: boolean; resolvedName?: string }>('backend-global/custom-field-set', {
+      method: 'POST',
+      body: { issueId, fieldName, value }
     });
   }
 }
