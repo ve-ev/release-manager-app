@@ -46,6 +46,15 @@ exports.rule = entities.Issue.onChange({
             return false;
         }
 
+        // Skip processing when the change was initiated by the Release Manager app
+        // We use an Issue extension property (updatedByReleaseManager) to mark
+        // such updates in the backend custom-field-set handler.
+        if (ctx.issue && ctx.issue.extensionProperties && ctx.issue.extensionProperties.updatedByReleaseManager) {
+            // Clear the marker so that subsequent manual changes are processed normally
+            ctx.issue.extensionProperties.updatedByReleaseManager = false;
+            return false;
+        }
+
         const fieldName = getPlannedReleaseFieldName(ctx);
         if (!fieldName) {
             throw new Error('Custom field mapping is not configured');

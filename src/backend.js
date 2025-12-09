@@ -851,6 +851,13 @@ exports.httpHandler = {
                         sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue not found');
                         return;
                     }
+
+                    // Mark this issue as updated by Release Manager so the workflow
+                    // rule (update-releases-on-cf-change.js) can distinguish app-
+                    // driven changes from manual edits and avoid feedback loops.
+                    if (issue.extensionProperties) {
+                        issue.extensionProperties.updatedByReleaseManager = true;
+                    }
                     const field = issue.project.findFieldByName(payload.fieldName);
                     if (!field) {
                         sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field not found');
