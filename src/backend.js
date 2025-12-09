@@ -287,29 +287,104 @@ function updateReleaseById(ctx, id, updatedReleaseVersion) {
 }
 
 /**
+ * Ensures that an issue belongs to at most one release in the plannedIssues list.
+ * This is used by workflow-based mapping from a single plannedRelease custom
+ * field to the Release Manager app data model.
+ *
+ * Behaviour:
+ *  - when targetRelease is null/undefined, the issue is removed from all releases.plannedIssues
+ *  - otherwise the issue is added to targetRelease.plannedIssues and removed from
+ *    all other releases.plannedIssues
+ *
+ * @param {Object} ctx
+ * @param {string} issueId
+ * @param {Object|null} targetRelease release object returned by findReleaseByVersion or null
+ * @param {string} [issueSummary]
+ */
+function setIssueSinglePlannedMembership(ctx, issueId, targetRelease, issueSummary) {
+    const releaseVersions = getReleaseVersions(ctx);
+
+    if (!targetRelease) {
+        // Remove from plannedIssues of all releases
+        let changed = false;
+        const removedFrom = [];
+        for (let i = 0; i < releaseVersions.length; i++) {
+            const before = Array.isArray(releaseVersions[i].plannedIssues) ? releaseVersions[i].plannedIssues : [];
+            const after = before.filter(function (it) { return it && it.id !== issueId; });
+            if (after.length !== before.length) {
+                releaseVersions[i].plannedIssues = after;
+                changed = true;
+                removedFrom.push(releaseVersions[i].version || releaseVersions[i].id);
+            }
+        }
+        if (changed) {
+            saveReleaseVersions(ctx, releaseVersions);
+            // eslint-disable-next-line no-console
+            console.log('[ReleaseManager][Backend] Issue', issueId, 'removed from planned issues for releases', removedFrom.join(', ') || '<none>');
+        }
+        return;
+    }
+
+    let changed = false;
+    const removedFrom = [];
+    const targetId = targetRelease.id;
+
+    for (let i = 0; i < releaseVersions.length; i++) {
+        const rv = releaseVersions[i];
+        const before = Array.isArray(rv.plannedIssues) ? rv.plannedIssues : [];
+
+        if (rv.id === targetId) {
+            // Ensure issue is present in the target release plannedIssues
+            if (!before.some(function (it) { return it && it.id === issueId; })) {
+                const list = before.slice();
+                list.push({ id: issueId, summary: issueSummary || '' });
+                rv.plannedIssues = list;
+                changed = true;
+            }
+        } else {
+            // Remove from other releases plannedIssues
+            const after = before.filter(function (it) { return it && it.id !== issueId; });
+            if (after.length !== before.length) {
+                rv.plannedIssues = after;
+                changed = true;
+                removedFrom.push(rv.version || rv.id);
+            }
+        }
+    }
+
+    if (changed) {
+        saveReleaseVersions(ctx, releaseVersions);
+        // eslint-disable-next-line no-console
+        console.log('[ReleaseManager][Backend] Issue', issueId, 'linked to planned release', targetRelease.version,
+            'and removed from planned releases', removedFrom.join(', ') || '<none>');
+    }
+}
+
+/**
  * Adds/Removes issue membership in releases based on version value.
  * If versionValue is null/empty or release with such version is not found, the issue is removed from all releases.
+ * Intended to be safely callable both from HTTP handlers and workflow rules.
+ *
  * @param {Object} ctx
- * @param {Object} issue - YouTrack issue entity or minimal object with id/summary
+ * @param {Object|string} issue - YouTrack issue entity or minimal object with id/summary or just issue id
  * @param {string|null} versionValue
  */
-// eslint-disable-next-line complexity
 function updateReleasesForIssueByVersion(ctx, issue, versionValue) {
     const issueId = typeof issue === 'string' ? issue : issue && issue.id;
     if (!issueId) { return; }
-    const release = versionValue ? findReleaseByVersion(ctx, versionValue) : null;
+
+    const trimmedValue = typeof versionValue === 'string' ? versionValue.trim() : null;
+    const release = trimmedValue ? findReleaseByVersion(ctx, trimmedValue) : null;
+
     if (!release) {
-        // remove from all
-        removeIssueFromOtherReleases(ctx, issueId, null);
         // eslint-disable-next-line no-console
-        console.log('[ReleaseManager][Backend] No matching release found for value', versionValue || '<empty>', '— issue', issueId, 'removed from all releases');
+        console.log('[ReleaseManager][Backend] No matching release found for value', trimmedValue || '<empty>', '— issue', issueId, 'removed from all planned releases');
+        setIssueSinglePlannedMembership(ctx, issueId, null);
         return;
     }
-    // add to one and remove from others
-    addIssueToRelease(ctx, release.id, issueId, (issue && issue.summary) || '');
-    removeIssueFromOtherReleases(ctx, issueId, release.id);
-    // eslint-disable-next-line no-console
-    console.log('[ReleaseManager][Backend] Issue', issueId, 'linked to release', release.version, 'and removed from other releases');
+
+    const issueSummary = (issue && typeof issue === 'object' && issue.summary) || '';
+    setIssueSinglePlannedMembership(ctx, issueId, release, issueSummary);
 }
 
 /**
