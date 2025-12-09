@@ -88,7 +88,7 @@ exports.rule = entities.Issue.onChange({
         try {
             // Update releases: remove from all if null, otherwise add to selected and remove from others
             api.updateReleasesForIssueByVersion(ctx, ctx.issue, newValue);
-            message("Release Manager App: Update releases is triggered");
+            message('Release Manager App: Update releases triggered due to the '+ field.name +' custom field change');
         } catch (e) {
             // eslint-disable-next-line no-console
             console.log('Failed to update releases on custom field change: ' + (e && e.message ? e.message : e));
