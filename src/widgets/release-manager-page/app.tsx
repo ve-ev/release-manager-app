@@ -37,7 +37,6 @@ export const api = new API(host);
 
 const AppComponent: React.FunctionComponent = () => {
   // Use custom hooks for data loading
-  const { releaseVersions, loading, error, refetch: fetchReleaseVersions } = useReleaseVersions(api);
   const config = useAppConfig(api);
   const permissions = usePermissions(api);
   const { expandedReleaseVersions, toggleExpandReleaseVersion } = useExpandedState(api);
@@ -69,6 +68,27 @@ const AppComponent: React.FunctionComponent = () => {
   const [initialShowMetaIssueForm, setInitialShowMetaIssueForm] = useState<boolean>(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const workflowUpdatedNoticeShownRef = useRef(false);
+
+  const handleWorkflowMembershipChange = useCallback(() => {
+    // Only show the notice when custom fields mapping feature is enabled
+    if (!config.customFieldsMapping) {
+      return;
+    }
+
+    // Avoid spamming the user if multiple polls detect changes in quick succession
+    if (workflowUpdatedNoticeShownRef.current) {
+      return;
+    }
+
+    workflowUpdatedNoticeShownRef.current = true;
+    setAlertMessage('Release list was updated via workflow based on planned release field changes.');
+  }, [config.customFieldsMapping, setAlertMessage]);
+
+  const { releaseVersions, loading, error, refetch: fetchReleaseVersions } = useReleaseVersions(api, {
+    onBackgroundMembershipChange: handleWorkflowMembershipChange
+  });
 
   // Track in-flight custom field updates to prevent duplicates
   const pendingCustomFieldUpdates = useRef<Set<string>>(new Set());
