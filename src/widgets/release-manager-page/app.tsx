@@ -1,4 +1,4 @@
-import React, {memo, useCallback, useState, useMemo} from 'react';
+import React, {memo, useCallback, useState, useMemo, useRef} from 'react';
 import Button from '@jetbrains/ring-ui-built/components/button/button';
 import {H1} from '@jetbrains/ring-ui-built/components/heading/heading';
 import Alert from '@jetbrains/ring-ui-built/components/alert/alert';
@@ -10,6 +10,7 @@ import {ReleaseVersion} from './interfaces';
 import SettingsForm from './components/settings/settings-form.tsx';
 import {VersionTable} from './components/table/version-table.tsx';
 import ReleaseNotesDialog from './components/release-notes-dialog.tsx';
+import AddIssueDialog from './components/add-issue-dialog.tsx';
 import {generateReleaseNotesMarkdown} from './utils/release-notes-utils.ts';
 import {EmptyState} from './components/empty-state.tsx';
 import {ErrorBoundary} from './components/error-boundary.tsx';
@@ -22,7 +23,8 @@ import {
   usePermissions,
   useExpandedState,
   useSettingsData,
-  useProgressSettings
+  useProgressSettings,
+  useIssueSearch
 } from './hooks';
 /* eslint-disable complexity */
 
@@ -35,23 +37,27 @@ export const api = new API(host);
 
 const AppComponent: React.FunctionComponent = () => {
   // Use custom hooks for data loading
-  const { releaseVersions, loading, error, refetch: fetchReleaseVersions } = useReleaseVersions(api);
   const config = useAppConfig(api);
   const permissions = usePermissions(api);
   const { expandedReleaseVersions, toggleExpandReleaseVersion } = useExpandedState(api);
-  
+
   // OPTIMIZATION: Load settings ONCE at app level instead of in every component
   // This prevents creating 100+ hook instances when rendering 100 release versions
   const { settings } = useSettingsData(api);
   const { progressSettings } = useProgressSettings(api);
-  
+  const { isLoadingIssues: isSearchingIssues, searchError: issueSearchError, searchIssues } = useIssueSearch(host);
+  const searchAndResolveCb = useCallback(
+    (q: string, existing: Array<{id: string; idReadable?: string; summary: string}>) => searchIssues(q, existing),
+    [searchIssues]
+  );
+
   // Derive visibility flags directly from loaded settings (eliminates redundant API call)
-  const hasProducts = useMemo(() => 
-    Boolean(settings.products && settings.products.length > 0), 
+  const hasProducts = useMemo(() =>
+    Boolean(settings.products && settings.products.length > 0),
     [settings.products]
   );
-  const hasProgress = useMemo(() => 
-    Boolean(progressSettings.customFieldNames && progressSettings.customFieldNames.length > 0), 
+  const hasProgress = useMemo(() =>
+    Boolean(progressSettings.customFieldNames && progressSettings.customFieldNames.length > 0),
     [progressSettings.customFieldNames]
   );
 
@@ -62,10 +68,90 @@ const AppComponent: React.FunctionComponent = () => {
   const [initialShowMetaIssueForm, setInitialShowMetaIssueForm] = useState<boolean>(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  
+
+  const workflowUpdatedNoticeShownRef = useRef(false);
+
+  const handleWorkflowMembershipChange = useCallback(() => {
+    // Only show the notice when custom fields mapping feature is enabled
+    if (!config.customFieldsMapping) {
+      return;
+    }
+
+    // Avoid spamming the user if multiple polls detect changes in quick succession
+    if (workflowUpdatedNoticeShownRef.current) {
+      return;
+    }
+
+    workflowUpdatedNoticeShownRef.current = true;
+    setAlertMessage('Release list was updated via workflow based on planned release field changes.');
+  }, [config.customFieldsMapping, setAlertMessage]);
+
+  const { releaseVersions, loading, error, refetch: fetchReleaseVersions } = useReleaseVersions(api, {
+    onBackgroundMembershipChange: handleWorkflowMembershipChange
+  });
+
+  // Track in-flight custom field updates to prevent duplicates
+  const pendingCustomFieldUpdates = useRef<Set<string>>(new Set());
+
+  // Helper function to update custom field with deduplication
+  const updateIssueCustomField = useCallback(async (issueId: string, fieldName: string, value: string) => {
+    const key = `${issueId}:${fieldName}`;
+
+    // Skip if already in progress
+    if (pendingCustomFieldUpdates.current.has(key)) {
+      logger.debug('Skipping duplicate custom field update for', issueId);
+      return;
+    }
+
+    // Mark as in progress
+    pendingCustomFieldUpdates.current.add(key);
+
+    try {
+      await api.setIssueCustomField(issueId, fieldName, value);
+    } catch (err) {
+      logger.error('Failed to set custom field for issue', issueId, err);
+    } finally {
+      // Clean up after completion
+      pendingCustomFieldUpdates.current.delete(key);
+    }
+  }, []);
+
+  // Helper function to compute added and removed issues between two release versions
+  const computeIssueChanges = useCallback((
+    previousIssues: Array<{id: string; isMeta?: boolean}> | undefined,
+    updatedIssues: Array<{id: string; isMeta?: boolean}> | undefined
+  ) => {
+    const prevIds = new Set((previousIssues || []).map(it => it.id));
+    const updatedIds = new Set((updatedIssues || []).filter(it => !it.isMeta).map(it => it.id));
+
+    const newlyAdded = (updatedIssues || []).filter(it => !it.isMeta && !prevIds.has(it.id));
+    const removed = (previousIssues || []).filter(it => !it.isMeta && !updatedIds.has(it.id));
+
+    return { newlyAdded, removed };
+  }, []);
+
+  // Helper function to handle custom field updates for added/removed issues
+  const handleCustomFieldUpdates = useCallback(async (
+    newlyAdded: Array<{id: string}>,
+    removed: Array<{id: string}>,
+    releaseVersion: string,
+    plannedReleaseField: string
+  ) => {
+    // Use release version directly as the field value
+    if (newlyAdded.length > 0) {
+      await Promise.all(newlyAdded.map(it => updateIssueCustomField(it.id, plannedReleaseField, releaseVersion)));
+    }
+
+    if (removed.length > 0) {
+      await Promise.all(removed.map(it => updateIssueCustomField(it.id, plannedReleaseField, '')));
+    }
+  }, [updateIssueCustomField]);
+
   // Release notes dialog state
   const [showReleaseNotesDialog, setShowReleaseNotesDialog] = useState<boolean>(false);
   const [releaseNotesText, setReleaseNotesText] = useState<string>('');
+  const [showAddIssueDialog, setShowAddIssueDialog] = useState<boolean>(false);
+  const [activeItemForAddIssue, setActiveItemForAddIssue] = useState<ReleaseVersion | null>(null);
 
   // Handle creating or updating a release version
   const handleSaveReleaseVersion = useCallback(async (releaseVersion: ReleaseVersion) => {
@@ -74,24 +160,42 @@ const AppComponent: React.FunctionComponent = () => {
         // Update existing release version
         await api.updateReleaseVersion(releaseVersion);
         setAlertMessage('Release version updated successfully');
+
+        // After updating, handle custom field changes for added/removed issues
+        const plannedReleaseField = settings.customFieldMapping?.plannedReleaseField;
+        if (config.customFieldsMapping && plannedReleaseField && currentReleaseVersion) {
+          const { newlyAdded, removed } = computeIssueChanges(
+            currentReleaseVersion.plannedIssues,
+            releaseVersion.plannedIssues
+          );
+          await handleCustomFieldUpdates(newlyAdded, removed, releaseVersion.version || '', plannedReleaseField);
+        }
       } else {
         // Create new release version
         await api.createReleaseVersion(releaseVersion);
         setAlertMessage('Release version created successfully');
+
+        // After creating a new release, set custom field on all added issues
+        const plannedReleaseField = settings.customFieldMapping?.plannedReleaseField;
+        if (config.customFieldsMapping && plannedReleaseField) {
+          const issuesToUpdate = (releaseVersion.plannedIssues || []).filter(it => !it.isMeta);
+          await handleCustomFieldUpdates(issuesToUpdate, [], releaseVersion.version || '', plannedReleaseField);
+        }
       }
-      
+
       // Refresh release versions and close form
       await fetchReleaseVersions();
       setShowForm(false);
       setCurrentReleaseVersion(undefined);
       // Important: reset meta-issue auto-open flag after save to avoid leaking into next form opening
       setInitialShowMetaIssueForm(false);
+    // eslint-disable-next-line no-catch-shadow,no-shadow
     } catch (error) {
       logger.error('Failed to save release version:', error);
       setAlertMessage('Failed to save release version. Please try again.');
       // Don't rethrow - handle gracefully with user feedback
     }
-  }, [fetchReleaseVersions]);
+  }, [fetchReleaseVersions, settings.customFieldMapping?.plannedReleaseField, config.customFieldsMapping, currentReleaseVersion, computeIssueChanges, handleCustomFieldUpdates]);
 
   // Handle confirming delete
   const handleConfirmDelete = useCallback((releaseVersion: ReleaseVersion) => {
@@ -104,11 +208,12 @@ const AppComponent: React.FunctionComponent = () => {
     if (!confirmDeleteId) {
       return;
     }
-    
+
     try {
       await api.deleteReleaseVersion(confirmDeleteId);
       setAlertMessage('Release version deleted successfully');
       await fetchReleaseVersions();
+    // eslint-disable-next-line no-catch-shadow,no-shadow
     } catch (error) {
       // Show error as alert message instead of setting error state
       setAlertMessage('Failed to delete release version');
@@ -133,6 +238,7 @@ const AppComponent: React.FunctionComponent = () => {
         setReleaseNotesText(md);
       }
       setShowReleaseNotesDialog(true);
+    // eslint-disable-next-line no-catch-shadow,no-shadow
     } catch (error) {
       logger.error('Failed to generate release notes:', error);
       setAlertMessage('Failed to generate release notes');
@@ -153,12 +259,46 @@ const AppComponent: React.FunctionComponent = () => {
     setShowForm(true);
   }, []);
 
-  // Handle open meta issue form
+  // Handle generic "Add Issue" action from Actions menu.
+  // Open the Edit form with the new Add Issue selector visible (do NOT auto-open Meta form).
   const handleAddMetaIssue = useCallback((releaseVersion: ReleaseVersion) => {
-    setCurrentReleaseVersion(releaseVersion);
-    setInitialShowMetaIssueForm(true);
-    setShowForm(true);
+    // Open dedicated Add Issue dialog instead of full edit form
+    setActiveItemForAddIssue(releaseVersion);
+    setShowAddIssueDialog(true);
   }, []);
+
+  const handleAddIssueDialogClose = useCallback(() => {
+    setShowAddIssueDialog(false);
+    setActiveItemForAddIssue(null);
+  }, []);
+
+  const handleAddIssueDialogSave = useCallback(async (updated: ReleaseVersion) => {
+    // Update the release, but keep the dialog open to allow multiple operations
+    try {
+      await api.updateReleaseVersion(updated);
+      await fetchReleaseVersions();
+
+      // After adding/removing issues, optionally set/reset custom field
+      const plannedReleaseField = settings.customFieldMapping?.plannedReleaseField;
+      // Respect feature flag: only perform when Custom Fields Mapping feature is enabled
+      if (config.customFieldsMapping && plannedReleaseField) {
+        const { newlyAdded, removed } = computeIssueChanges(
+          activeItemForAddIssue?.plannedIssues,
+          updated.plannedIssues
+        );
+        await handleCustomFieldUpdates(newlyAdded, removed, updated.version || '', plannedReleaseField);
+
+        // IMPORTANT: keep the baseline ("previous") plannedIssues in sync while
+        // the Add Issue dialog stays open. Otherwise, a second add/remove
+        // operation in the same dialog would compare against the original
+        // release state and could skip or duplicate custom field updates.
+        setActiveItemForAddIssue(prev => (prev ? { ...prev, plannedIssues: updated.plannedIssues } : prev));
+      }
+    } catch (e) {
+      logger.error('Failed to update release version while adding/removing issue', e);
+      setAlertMessage('Failed to update planned issues');
+    }
+  }, [fetchReleaseVersions, settings.customFieldMapping?.plannedReleaseField, config.customFieldsMapping, activeItemForAddIssue?.plannedIssues, computeIssueChanges, handleCustomFieldUpdates]);
 
   // Handle canceling the form
   const handleCancelForm = useCallback(() => {
@@ -166,7 +306,7 @@ const AppComponent: React.FunctionComponent = () => {
     setCurrentReleaseVersion(undefined);
     setInitialShowMetaIssueForm(false);
   }, []);
-  
+
   // Memoize empty state check
   const isEmptyHeader = useMemo(
     () => !releaseVersions || releaseVersions.length === 0,
@@ -188,26 +328,28 @@ const AppComponent: React.FunctionComponent = () => {
     }
 
     return (
-      <VersionTable
-        releaseVersions={releaseVersions}
-        loading={loading}
-        error={error}
-        expandedReleaseVersions={expandedReleaseVersions}
-        toggleExpandReleaseVersion={toggleExpandReleaseVersion}
-        handleEditReleaseVersion={handleEditReleaseVersion}
-        handleConfirmDelete={handleConfirmDelete}
-        showProductColumn={hasProducts}
-        showProgressColumn={hasProgress}
-        host={host}
-        canEdit={permissions.canEdit}
-        canDelete={permissions.canDelete}
-        manualIssueManagement={config.manualIssueManagement}
-        metaIssuesEnabled={config.metaIssuesEnabled}
-        handleAddMetaIssue={handleAddMetaIssue}
-        handleGenerateReleaseNotes={handleGenerateReleaseNotes}
-        settings={settings}
-        progressSettings={progressSettings}
-      />
+      <div>
+        <VersionTable
+          releaseVersions={releaseVersions}
+          loading={loading}
+          error={error}
+          expandedReleaseVersions={expandedReleaseVersions}
+          toggleExpandReleaseVersion={toggleExpandReleaseVersion}
+          handleEditReleaseVersion={handleEditReleaseVersion}
+          handleConfirmDelete={handleConfirmDelete}
+          showProductColumn={hasProducts}
+          showProgressColumn={hasProgress}
+          host={host}
+          canEdit={permissions.canEdit}
+          canDelete={permissions.canDelete}
+          manualIssueManagement={config.manualIssueManagement}
+          metaIssuesEnabled={config.metaIssuesEnabled}
+          handleAddMetaIssue={handleAddMetaIssue}
+          handleGenerateReleaseNotes={handleGenerateReleaseNotes}
+          settings={settings}
+          progressSettings={progressSettings}
+        />
+      </div>
     );
   }, [
     releaseVersions,
@@ -239,13 +381,13 @@ const AppComponent: React.FunctionComponent = () => {
       <div className="header">
         {!showEmpty && <H1>Release Management</H1>}
         <div className="header-actions">
-          {!showForm && (
+          {!showForm && !showSettings && (
             <>
               {permissions.canCreate && !showEmpty && (
                 <Button primary onClick={handleAddReleaseVersion}>Add Release Version</Button>
               )}
               {permissions.canAccessSettings && (
-                <Button 
+                <Button
                   className="progress-settings-button"
                   onClick={() => setShowSettings(true)}
                   title="Settings"
@@ -259,11 +401,11 @@ const AppComponent: React.FunctionComponent = () => {
         </div>
       </div>
 
-      {/* Keep content mounted but hide it when form is open to avoid unmount/remount cycle */}
-      <div style={{ display: showForm ? 'none' : 'block' }}>
+      {/* Keep content mounted but hide it when form(s) are open to avoid unmount/remount cycle */}
+      <div style={{ display: (showForm || showSettings) ? 'none' : 'block' }}>
         {renderContent}
       </div>
-      
+
       {showForm && (
         <div className="form-container">
           <ReleaseVersionForm
@@ -299,15 +441,28 @@ const AppComponent: React.FunctionComponent = () => {
       )}
 
       {showSettings && permissions.canAccessSettings && (
-        <SettingsForm
-          onClose={() => setShowSettings(false)}
-        />
+        <div className="form-container">
+          <SettingsForm
+            onClose={() => setShowSettings(false)}
+          />
+        </div>
       )}
 
       <ReleaseNotesDialog
         open={showReleaseNotesDialog}
         notes={releaseNotesText}
         onClose={() => setShowReleaseNotesDialog(false)}
+      />
+
+      <AddIssueDialog
+        open={showAddIssueDialog}
+        item={activeItemForAddIssue || ({} as ReleaseVersion)}
+        onClose={handleAddIssueDialogClose}
+        onSave={handleAddIssueDialogSave}
+        isLoadingIssues={isSearchingIssues}
+        searchError={issueSearchError}
+        searchAndResolve={searchAndResolveCb}
+        metaIssuesEnabled={config.metaIssuesEnabled}
       />
 
     </div>
@@ -317,7 +472,7 @@ const AppComponent: React.FunctionComponent = () => {
 // Wrap with ErrorBoundary for graceful error handling
 const AppWithErrorBoundary = memo(() => (
   <ErrorBoundary>
-    <AppComponent />
+    <AppComponent/>
   </ErrorBoundary>
 ));
 

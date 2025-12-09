@@ -1,6 +1,5 @@
 .container {
   padding: calc(var(--ring-unit) * 2);
-  width: 100%;
   max-width: 960px; /* Constrain width for better readability/alignment */
   margin: 0 auto; /* Center the form content */
 }

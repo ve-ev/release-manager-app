@@ -55,7 +55,7 @@ const MetaIssueForm: React.FC<MetaIssueFormProps> = ({
 
     // Use custom hooks for data loading and issue search
     const { relatedIssues, setRelatedIssues, isLoading: isLoadingInitial } = useInitialRelatedIssues(host, initialRelatedIssueIds);
-    const { isLoadingIssues, searchError, searchIssues, setSearchError } = useIssueSearch(host);
+    const { isLoadingIssues, searchError, searchIssues} = useIssueSearch(host);
 
     // Add issues from comma-separated input
     const handleSearchIssues = useCallback(async () => {
@@ -96,48 +96,51 @@ const MetaIssueForm: React.FC<MetaIssueFormProps> = ({
   }), [relatedIssues]);
 
     return (
-        <div className={styles.container}>
-            <div className={styles.heading}>
-                <H3>{isEdit ? 'Edit Meta Issue' : 'Create Meta Issue'}</H3>
-            </div>
+      <div className={styles.container}>
+        <div className={styles.heading}>
+          <H3>{isEdit ? 'Edit Meta Issue' : 'Create Meta Issue'}</H3>
+        </div>
 
-            {errors.length > 0 && (
-                <div className={styles.error}>
-                    {errors.map(err => (
-                        <ErrorMessage key={`err-${err}`}>{err}</ErrorMessage>
+        {errors.length > 0 && (
+        <div className={styles.error}>
+          {errors.map(err => (
+            <ErrorMessage key={`err-${err}`}>{err}</ErrorMessage>
                     ))}
-                </div>
+        </div>
             )}
 
-            <div className={styles.formGroup}>
-                <Input
-                    label="Issue summary"
-                    name="metaIssueSummary"
-                    value={summary}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSummary(e.target.value)}
-                />
-      </div>
-
-      <PlannedIssues
-        formData={tmpFormData}
-        linkedIssuesInput={linkedIssuesInput}
-        handleLinkedIssuesInputChange={(e: React.ChangeEvent<HTMLInputElement>) => setLinkedIssuesInput(e.target.value)}
-        handleSearchIssues={handleSearchIssues}
-        isLoadingIssues={isLoadingIssues || isLoadingInitial}
-        handleRemoveIssue={handleRemoveIssue}
-        searchError={searchError}
-        label="Related Issues (comma-separated issue IDs)"
-      />
-
-            <Panel className={styles.formPanel}>
-                <div className={styles.buttons}>
-                    <Button onClick={onCancel}>Cancel</Button>
-                    <Button primary onClick={handleSubmit} disabled={isSubmitting}>
-                        {isSubmitting ? <LoaderInline/> : (isEdit ? 'Save' : 'Add Meta Issue')}
-                    </Button>
-                </div>
-            </Panel>
+        <div className={styles.formGroup}>
+          <Input
+            label="Issue summary"
+            name="metaIssueSummary"
+            value={summary}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSummary(e.target.value)}
+          />
         </div>
+
+        <div style={{paddingRight: '10px'}}>
+          <PlannedIssues
+            formData={tmpFormData}
+            linkedIssuesInput={linkedIssuesInput}
+            handleLinkedIssuesInputChange={(e: React.ChangeEvent<HTMLInputElement>) => setLinkedIssuesInput(e.target.value)}
+            handleSearchIssues={handleSearchIssues}
+            isLoadingIssues={isLoadingIssues || isLoadingInitial}
+            handleRemoveIssue={handleRemoveIssue}
+            searchError={searchError}
+            label="Related Issues (comma-separated issue IDs)"
+          />
+        </div>
+
+        <Panel className={styles.formPanel}>
+          <div className={styles.buttons}>
+            <Button onClick={onCancel}>Cancel</Button>
+            <Button primary onClick={handleSubmit} disabled={isSubmitting}>
+              {/* eslint-disable-next-line no-nested-ternary */}
+              {isSubmitting ? <LoaderInline/> : (isEdit ? 'Save' : 'Add Meta Issue')}
+            </Button>
+          </div>
+        </Panel>
+      </div>
     );
 };
 

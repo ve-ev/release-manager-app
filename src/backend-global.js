@@ -88,8 +88,12 @@ function prepareCustomFieldData(issue, fieldName) {
     const names = (fieldName || '')
         .toString()
         .split(/[;,]/)
-        .map(function (s) { return s.trim(); })
-        .filter(function (s) { return !!s; });
+        .map(function (s) {
+            return s.trim();
+        })
+        .filter(function (s) {
+            return !!s;
+        });
     const orderedNames = names.length > 0 ? names : [fieldName];
 
     var selectedName = orderedNames.length > 0 ? orderedNames[0] : fieldName;
@@ -175,7 +179,7 @@ exports.httpHandler = {
                     }
 
                     // Fetch all issues and return results with found/not found status
-                    const results = issueIds.map(function(issueId) {
+                    const results = issueIds.map(function (issueId) {
                         const foundIssue = entities.Issue.findById(issueId);
                         if (foundIssue) {
                             return {
@@ -251,11 +255,15 @@ exports.httpHandler = {
                     const names = (fieldName || '')
                         .toString()
                         .split(/[;,]/)
-                        .map(function (s) { return s.trim(); })
-                        .filter(function (s) { return !!s; });
+                        .map(function (s) {
+                            return s.trim();
+                        })
+                        .filter(function (s) {
+                            return !!s;
+                        });
                     const orderedNames = names.length > 0 ? names : [fieldName];
                     const actual = resolveFieldNameCaseInsensitive(issue, orderedNames);
-                    ctx.response.json({ exists: !!actual, resolvedName: actual });
+                    ctx.response.json({exists: !!actual, resolvedName: actual});
                 } catch (error) {
                     logError('Failed to check issue field existence', error);
                     sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
@@ -285,14 +293,20 @@ exports.httpHandler = {
                     }
                     // collect ids: parent first, then all subtasks
                     const ids = [issueId];
-                    parent.links['parent for'].forEach(function (subTask) { ids.push(subTask.id); });
+                    parent.links['parent for'].forEach(function (subTask) {
+                        ids.push(subTask.id);
+                    });
 
                     // Support multiple field names in order (comma/semicolon separated)
                     const names = (fieldName || '')
                         .toString()
                         .split(/[;,]/)
-                        .map(function (s) { return s.trim(); })
-                        .filter(function (s) { return !!s; });
+                        .map(function (s) {
+                            return s.trim();
+                        })
+                        .filter(function (s) {
+                            return !!s;
+                        });
                     const orderedNames = names.length > 0 ? names : [fieldName];
 
                     // First resolve actual field name on parent (case-insensitive). If not exists, skip fetching per-issue values
@@ -309,9 +323,13 @@ exports.httpHandler = {
                                 value = (typeof fld.name === 'string') ? fld.name : null;
                             }
                         }
-                        items.push({ id: id, value: value });
+                        items.push({id: id, value: value});
                     }
-                    ctx.response.json({ parentIssueId: issueId, fieldName: selectedActualName || fieldName, items: items });
+                    ctx.response.json({
+                        parentIssueId: issueId,
+                        fieldName: selectedActualName || fieldName,
+                        items: items
+                    });
                 } catch (error) {
                     logError('Failed to get issue field bulk', error);
                     sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
@@ -343,24 +361,24 @@ exports.httpHandler = {
                     for (let i = 0; i < issueIds.length; i++) {
                         const issueId = issueIds[i];
                         const parent = entities.Issue.findById(issueId);
-                        
+
                         if (!parent) {
-                            results[issueId] = { items: [], usedField: null };
+                            results[issueId] = {items: [], usedField: null};
                             continue;
                         }
 
                         // Resolve which field name exists on this issue
                         const selectedActualName = resolveFieldNameCaseInsensitive(parent, fieldNames);
-                        
+
                         if (!selectedActualName) {
-                            results[issueId] = { items: [], usedField: null };
+                            results[issueId] = {items: [], usedField: null};
                             continue;
                         }
 
                         // Collect ids: parent first, then all subtasks
                         const ids = [issueId];
-                        parent.links['parent for'].forEach(function (subTask) { 
-                            ids.push(subTask.id); 
+                        parent.links['parent for'].forEach(function (subTask) {
+                            ids.push(subTask.id);
                         });
 
                         const items = [];
@@ -374,12 +392,12 @@ exports.httpHandler = {
                                     value = (typeof fld.name === 'string') ? fld.name : null;
                                 }
                             }
-                            items.push({ id: id, value: value });
+                            items.push({id: id, value: value});
                         }
 
-                        results[issueId] = { 
-                            items: items, 
-                            usedField: selectedActualName 
+                        results[issueId] = {
+                            items: items,
+                            usedField: selectedActualName
                         };
                     }
 

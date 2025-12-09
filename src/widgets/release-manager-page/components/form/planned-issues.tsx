@@ -33,7 +33,6 @@ interface PlannedIssuesProps {
 
 const PlannedIssues: React.FC<PlannedIssuesProps> = ({
   formData,
-  linkedIssuesInput,
   handleLinkedIssuesInputChange,
   handleSearchIssues,
   isLoadingIssues,
@@ -45,7 +44,7 @@ const PlannedIssues: React.FC<PlannedIssuesProps> = ({
 }) => (
   <Row className={'planned-issues'}>
     <Col xs={12}>
-      <div className={styles.formGroup}>
+      <div className={styles.formGroup} style={{paddingRight: "8px"}}>
         <div className={styles.issueSearchContainer}>
           <Input
             label={(
@@ -55,10 +54,9 @@ const PlannedIssues: React.FC<PlannedIssuesProps> = ({
               </span>
             )}
             name="linkedIssuesInput"
-            value={linkedIssuesInput}
             onChange={handleLinkedIssuesInputChange}
             className={styles.issueSearchInput}
-            onKeyPress={(e) => {
+            onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
                 handleSearchIssues();

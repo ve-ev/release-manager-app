@@ -1,0 +1,56 @@
+.add-issue-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.type-toggle {
+    margin-top: 10px;
+    padding-bottom: 3px;
+    box-shadow: none;
+}
+
+.add-issue-panel {
+  width: 900px;
+  max-width: 96vw;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ring-content-background-color);
+  border-radius: var(--ring-border-radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-sizing: border-box;
+}
+
+.add-issue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--ring-unit);
+  border-bottom: 1px solid var(--ring-line-color);
+}
+
+.add-issue-header .title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+
+/* PlannedIssues table area should use remaining space and scroll */
+.issuesList {
+  flex: 1 1 auto;
+  max-height: none; /* remove fixed max-height */
+  overflow: auto;
+}
+
+/* Make the meta issue form stretch nicely */
+.meta-issue-form-container {
+  width: 100%;
+  display: initial;
+}
+
+
