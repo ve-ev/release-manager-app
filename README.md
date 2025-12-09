@@ -16,6 +16,8 @@ The app ships as a widget for PROJECT_SETTINGS and uses a lightweight backend to
 - Track progress based on configurable custom fields and value zones (green/yellow/red)
 - Manage planned issues per release, with optional meta-issues aggregation
 - Inline status and test-status tracking for issues when manual issue management is enabled
+- Use the **Generic Add Issue Action** to quickly attach arbitrary issues to a release from the table
+- Keep releases in sync with your YouTrack project by enabling the **Custom Field Mapping** feature
 - Filters and sorting for quick navigation across releases
 - Visual indicators for feature freeze and release deadlines (today/overdue)
 - Generate Markdown release notes from the release definition and planned issues
