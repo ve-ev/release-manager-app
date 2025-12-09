@@ -241,7 +241,7 @@ export class API {
   }
 
   async setIssueCustomField(issueId: string, fieldName: string, value: string): Promise<{ success: boolean; resolvedName?: string }>{
-    return this.fetchJson<{ success: boolean; resolvedName?: string }>('backend-global/custom-field-set', {
+    return this.fetchJson<{ success: boolean; resolvedName?: string }>('backend/custom-field-set', {
       method: 'POST',
       body: { issueId, fieldName, value }
     });
