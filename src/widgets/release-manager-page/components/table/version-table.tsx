@@ -123,7 +123,7 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
   /** Apply filters and sorting, then render items */
   const releaseVersionItems = useMemo(() => {
     const norm = (v?: string) => (v || '').toLowerCase();
-    
+
     // Pre-normalize filter values once
     const normProductFilter = norm(productFilter);
     const normStatusFilter = norm(statusFilter);
@@ -131,21 +131,21 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
 
     // Single-pass filtering (instead of 4 separate iterations)
     const filtered = releaseVersions.filter(item => {
-      if (!item.id) return false;
-      if (normProductFilter && norm(item.product) !== normProductFilter) return false;
-      if (normStatusFilter && norm(item.status) !== normStatusFilter) return false;
-      if (normVersionFilter && !norm(item.version).includes(normVersionFilter)) return false;
+      if (!item.id) {return false;}
+      if (normProductFilter && norm(item.product) !== normProductFilter) {return false;}
+      if (normStatusFilter && norm(item.status) !== normStatusFilter) {return false;}
+      if (normVersionFilter && !norm(item.version).includes(normVersionFilter)) {return false;}
       return true;
     });
 
     const cmpStr = (a?: string, b?: string) => (a || '').localeCompare(b || '', undefined, { numeric: true, sensitivity: 'base' });
-    
+
     // Pre-compute date timestamps ONCE for all items (instead of creating Date objects repeatedly during sort)
     const releaseDates = new Map<string | number, number>();
     const freezeDates = new Map<string | number, number>();
     filtered.forEach(item => {
-      if (item.releaseDate) releaseDates.set(item.id, new Date(item.releaseDate).getTime());
-      if (item.featureFreezeDate) freezeDates.set(item.id, new Date(item.featureFreezeDate).getTime());
+      if (item.releaseDate) {releaseDates.set(item.id, new Date(item.releaseDate).getTime());}
+      if (item.featureFreezeDate) {freezeDates.set(item.id, new Date(item.featureFreezeDate).getTime());}
     });
     const getTime = (id: string | number, map: Map<string | number, number>) => map.get(id) || 0;
 
@@ -248,7 +248,7 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
             value={productFilter}
             onChange={e => setProductFilter(e.target.value)}
           >
-            <option value="">All products</option>
+            <option value="">All tags</option>
             {products.map(p => (
               <option key={p} value={p}>{p}</option>
             ))}

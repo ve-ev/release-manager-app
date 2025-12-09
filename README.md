@@ -1,18 +1,18 @@
 # Release Manager App
 
-A YouTrack project settings app for planning, tracking, and communicating product releases. 
-It provides a single place to define "Release Versions" with dates, status, planned/meta issues, and product tags; to visualize progress; and to generate release notes. 
+A YouTrack project settings app for planning, tracking, and communicating releases. 
+It provides a single place to define "Release Versions" with dates, status, planned/meta issues, and tags; to visualize progress; and to generate release notes. 
 The app ships as a widget for PROJECT_SETTINGS and uses a lightweight backend to persist data in project extension properties.
 
 ## Getting Started
 1. In YouTrack, install or upload the app bundle.
 2. Open a project’s settings and set the “Release Manager” group.
-3. Open App > Settings, enter custom field names and value zones, and optionally define products.
+3. Open App > Settings, enter custom field names and value zones, and optionally define tags.
 4. Create your first release version, add planned issues or meta issues.
 5. Use filters and sorting to navigate; expand rows to review details and generate release notes.
 
 ## Highlights
-- Plan releases per project with Release Versions (version, status, dates, product) and details (description, additional info)
+- Plan releases per project with Release Versions (version, status, dates, tag) and details (description, additional info)
 - Track progress based on configurable custom fields and value zones (green/yellow/red)
 - Manage planned issues per release, with optional meta-issues aggregation
 - Inline status and test-status tracking for issues when manual issue management is enabled
@@ -26,7 +26,7 @@ The app ships as a widget for PROJECT_SETTINGS and uses a lightweight backend to
 ## Feature Overview
 
 1. Release Versions
-   - Fields: id, product, version, description, additionalInfo, featureFreezeDate, releaseDate, status (Planning | In progress | Released | Overdue | Canceled), freezeConfirmed (flag), plannedIssues, linkedIssues, metaIssues.
+   - Fields: id, tag (stored in the `product` field for backward compatibility), version, description, additionalInfo, featureFreezeDate, releaseDate, status (Planning | In progress | Released | Overdue | Canceled), freezeConfirmed (flag), plannedIssues, linkedIssues, metaIssues.
    - Validation (enforced server-side):
      - version is required
      - releaseDate is required
@@ -46,9 +46,9 @@ The app ships as a widget for PROJECT_SETTINGS and uses a lightweight backend to
    - The app tries the first available custom field name across issues (parent/meta and subtasks) to derive per-issue values.
    - A progress bar summarizes the current state (UI components and styles under components/table/progress and styles/progress-bar.css).
 
-4. Products
-   - Optional list of products configured in Settings, each with a color. Color can be edited or auto-generated deterministically based on product name.
-   - When products exist, the table shows a Product column and a product filter.
+4. Tags
+   - Optional list of tags configured in Settings, each with a color. Color can be edited or auto-generated deterministically based on tag name.
+   - When tags exist, the table shows a Tag column and a tag filter.
 
 5. Release Status and Date Indicators
    - Derived display status can become Overdue when the release date has passed and status is not Released/Canceled.
@@ -58,8 +58,8 @@ The app ships as a widget for PROJECT_SETTINGS and uses a lightweight backend to
    - Dates are highlighted when today/expired under the same conditions.
 
 6. Filters and Sorting
-   - Filters: by product (exact), version (substring), and status (exact).
-   - Sorting: by product, version, progress (approx. by planned issue count), status (predefined order), featureFreezeDate, and releaseDate (default desc for dates, asc for others). Sorting is toggled via the header.
+   - Filters: by tag (exact), version (substring), and status (exact).
+   - Sorting: by tag, version, progress (approx. by planned issue count), status (predefined order), featureFreezeDate, and releaseDate (default desc for dates, asc for others). Sorting is toggled via the header.
 
 7. Permissions Model
    - Derived from backend /permissions endpoint, based on groups configured in app settings:
@@ -86,7 +86,7 @@ The app ships as a widget for PROJECT_SETTINGS and uses a lightweight backend to
 Project-scoped (src/backend.js):
 - GET /backend/config → { manualIssueManagement, metaIssuesEnabled }
 - GET /backend/permissions → { isManager, isLightManager }
-- GET /backend/app-settings → progress settings and products
+- GET /backend/app-settings → progress settings and tags (stored under `products` for backward compatibility)
 - PUT /backend/app-settings → update settings; requires at least one customFieldName
 - GET /backend/releases → list of releases
 - GET /backend/release?id=… → single release

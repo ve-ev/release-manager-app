@@ -10,7 +10,7 @@ import {generateClientId} from '../../utils/id-generator';
 import {invalidateProgressCache} from '../../utils/progress-cache';
 import {CustomFieldMapping} from './custom-field-mapping';
 import {ProgressTrackingSettings} from './progress-tracking-settings';
-import {ProductsSettings} from './products-settings';
+import {TagsSettings} from './tags-settings.tsx';
 
 
 /**
@@ -175,7 +175,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
 
             <div className="settings-separator horizontal" role="separator" aria-orientation="horizontal"/>
 
-            <ProductsSettings
+            <TagsSettings
               settings={settings}
               setSettings={setSettings}
               newProductName={newProductName}

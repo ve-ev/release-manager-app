@@ -26,9 +26,9 @@ interface Props {
 }
 
 /**
- * Products settings (independent component)
+ * Tags settings (independent component)
  */
-export const ProductsSettings: React.FC<Props> = ({
+export const TagsSettings: React.FC<Props> = ({
   settings,
   setSettings,
   newProductName,
@@ -44,9 +44,9 @@ export const ProductsSettings: React.FC<Props> = ({
 }) => {
   return (
     <div className="settings-field">
-      <H3>Products</H3>
+      <H3>Tags</H3>
       {(settings.products || []).length === 0 ? (
-        <div className="field-help">No products configured yet.</div>
+        <div className="field-help">No tags configured yet.</div>
       ) : (
         <div className="products-list">
           {(settings.products || []).map(p => (
@@ -56,7 +56,7 @@ export const ProductsSettings: React.FC<Props> = ({
                   <Input
                     value={editProductName}
                     onChange={(e) => setEditProductName(e.target.value)}
-                    placeholder="Product name"
+                    placeholder="Tag name"
                   />
                   <input
                     className="product-color-input"
@@ -98,7 +98,7 @@ export const ProductsSettings: React.FC<Props> = ({
         <Input
           value={newProductName}
           onChange={(e) => setNewProductName(e.target.value)}
-          placeholder="New product name"
+          placeholder="New tag name"
         />
         <Button onClick={handleAddProduct} disabled={!newProductName.trim()}>Add</Button>
       </div>
@@ -106,4 +106,4 @@ export const ProductsSettings: React.FC<Props> = ({
   );
 };
 
-export default ProductsSettings;
+export default TagsSettings;

@@ -4,8 +4,8 @@ import DropdownMenu from '@jetbrains/ring-ui-built/components/dropdown-menu/drop
 import {Directions} from "@jetbrains/ring-ui-built/components/popup/popup.consts";
 import {Expander} from './expander';
 import {formatDate, isExpired, isToday} from '../../utils/date-utils';
-import {ProductTag} from '../common/product-tag';
-import {StatusTag, ReleaseStatus} from '../common/status-tag';
+import {TagBadge} from '../common';
+import {StatusTag, ReleaseStatus} from '../common';
 import {ReleaseVersion, AppSettings} from '../../interfaces';
 import {ProgressBar} from './progress/progress-bar';
 import {api} from '../../app';
@@ -285,7 +285,7 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
       </div>
       {showProductColumn ? (
         <div className="version-list-cell product-cell">
-          <ProductTag product={item.product || ''} settings={progressSettings}/>
+          <TagBadge product={item.product || ''} settings={progressSettings}/>
         </div>
       ) : null}
       <div className="version-list-cell version-cell">
