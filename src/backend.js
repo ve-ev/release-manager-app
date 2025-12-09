@@ -213,6 +213,11 @@ function addIssueToRelease(ctx, releaseId, issueId, issueSummary) {
 
         // After adding to release, set planned release custom field on the issue
         try {
+            // Check if custom fields mapping feature is enabled
+            if (!ctx.settings.customFieldsMapping) {
+                return;
+            }
+
             const settings = getAppSettings(ctx);
             const mapping = (settings && settings.customFieldMapping) || {};
             const fieldName = mapping.plannedReleaseField;
@@ -581,19 +586,22 @@ exports.httpHandler = {
                     if (saveReleaseVersions(ctx, releaseVersions)) {
                         // After creating release version, create custom field value if custom field mapping is configured
                         try {
-                            const appSettings = getAppSettings(ctx);
-                            let settings = appSettings;
-                            if (typeof appSettings === 'string') {
-                                settings = JSON.parse(appSettings);
-                            }
+                            // Check if custom fields mapping feature is enabled
+                            if (ctx.settings.customFieldsMapping) {
+                                const appSettings = getAppSettings(ctx);
+                                let settings = appSettings;
+                                if (typeof appSettings === 'string') {
+                                    settings = JSON.parse(appSettings);
+                                }
 
-                            const fieldName = settings && settings.customFieldMapping && settings.customFieldMapping.plannedReleaseField;
-                            if (fieldName && releaseVersion.version) {
-                                const field = ctx.project.findFieldByName(fieldName);
-                                if (field) {
-                                    const existingValue = field.findValueByName(releaseVersion.version);
-                                    if (!existingValue) {
-                                        field.createValue(releaseVersion.version);
+                                const fieldName = settings && settings.customFieldMapping && settings.customFieldMapping.plannedReleaseField;
+                                if (fieldName && releaseVersion.version) {
+                                    const field = ctx.project.findFieldByName(fieldName);
+                                    if (field) {
+                                        const existingValue = field.findValueByName(releaseVersion.version);
+                                        if (!existingValue) {
+                                            field.createValue(releaseVersion.version);
+                                        }
                                     }
                                 }
                             }
@@ -834,6 +842,12 @@ exports.httpHandler = {
             scope: 'project',
             handle: function handle(ctx) {
                 try {
+                    // Check if custom fields mapping feature is enabled
+                    if (!ctx.settings.customFieldsMapping) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Custom fields mapping feature is disabled');
+                        return;
+                    }
+
                     const payload = ctx.request.json();
                     const issue = entities.Issue.findById(payload.issueId);
                     if (!issue) {
