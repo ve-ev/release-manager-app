@@ -287,6 +287,12 @@ const AppComponent: React.FunctionComponent = () => {
           updated.plannedIssues
         );
         await handleCustomFieldUpdates(newlyAdded, removed, updated.version || '', plannedReleaseField);
+
+        // IMPORTANT: keep the baseline ("previous") plannedIssues in sync while
+        // the Add Issue dialog stays open. Otherwise, a second add/remove
+        // operation in the same dialog would compare against the original
+        // release state and could skip or duplicate custom field updates.
+        setActiveItemForAddIssue(prev => (prev ? { ...prev, plannedIssues: updated.plannedIssues } : prev));
       }
     } catch (e) {
       logger.error('Failed to update release version while adding/removing issue', e);
