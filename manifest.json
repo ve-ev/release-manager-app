@@ -19,5 +19,12 @@
       "iconPath": "release-manager-page/widget-icon.svg",
       "permissions": []
     }
+  ],
+  "workflows": [
+    {
+      "key": "update-releases-on-cf-change",
+      "name": "Update Releases on Custom Field Change",
+      "path": "update-releases-on-cf-change.js"
+    }
   ]
 }

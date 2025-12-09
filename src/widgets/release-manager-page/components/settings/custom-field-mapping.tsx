@@ -15,6 +15,9 @@ export const CustomFieldMapping: React.FC<Props> = ({ settings, setSettings }) =
       <div className="field-help">
         Map issue custom field used to mark planned release version. This is the name or ID of a custom field in your tracker.
       </div>
+      <div className="field-help" style={{ marginTop: '8px', padding: '8px', backgroundColor: '#f0f8ff', borderLeft: '3px solid #2196F3' }}>
+        <strong>ℹ️ Workflow Trigger:</strong> When you update the mapped custom field on an issue, the &#34;Update Releases on Custom Field Change&#34; workflow will automatically update the release versions in this app. Make sure the workflow is enabled in your project settings.
+      </div>
       <br/>
 
       <label htmlFor="plannedReleaseField">Planned Release Field</label>

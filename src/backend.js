@@ -8,8 +8,6 @@
 // YouTrack workflow entities API
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const entities = require('@jetbrains/youtrack-scripting-api/entities');
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const backendGlobal = require('./backend-global.js');
 
 /**
  * HTTP status codes used throughout the application
@@ -192,7 +190,6 @@ function findReleaseByVersion(ctx, version) {
 
 /**
  * Adds an issue to a given release (by id) if not yet present and persists changes.
- * Also sets the configured custom field on the issue to the formatted release value.
  * @param {Object} ctx
  * @param {string} releaseId
  * @param {string} issueId
@@ -211,93 +208,8 @@ function addIssueToRelease(ctx, releaseId, issueId, issueSummary) {
         rv.linkedIssues = list;
         saveReleaseVersions(ctx, releaseVersions);
 
-        // After adding to release, set planned release custom field on the issue
-        try {
-            // Check if custom fields mapping feature is enabled
-            if (!ctx.settings.customFieldsMapping) {
-                return;
-            }
-
-            const settings = getAppSettings(ctx);
-            const mapping = (settings && settings.customFieldMapping) || {};
-            const fieldName = mapping.plannedReleaseField;
-            if (fieldName && rv.version) {
-                // Use version directly as the field value
-                trySetFieldViaEndpointOrDirect(ctx, issueId, fieldName, rv.version);
-            }
-        } catch (e) {
-            logError('Failed to set custom field after adding issue to release', e);
-        }
-    }
-}
-
-/**
- * Calls the existing backend-global set-custom-field-value endpoint with a mock ctx.
- * Falls back to direct assignment if the endpoint fails or leaves the value unset.
- * Note: We must not modify the endpoint itself.
- * @param {Object} ctx
- * @param {string} issueId
- * @param {string} fieldName
- * @param {string} fieldValue
- */
-// eslint-disable-next-line complexity
-function trySetFieldViaEndpointOrDirect(ctx, issueId, fieldName, fieldValue) {
-    try {
-        const issue = entities.Issue.findById(issueId);
-        if (!issue || !issue.project) { return; }
-
-        // Build a minimal mock ctx compatible with backend-global endpoint expectations
-        const mockCtx = {
-            issue: issue,
-            request: {
-                json: function () { return ({ fieldName: fieldName, fieldValue: fieldValue }); }
-            },
-            response: {
-                code: 200,
-                json: function () { /* no-op */ }
-            },
-            project: ctx.project,
-            currentUser: ctx.currentUser,
-            settings: ctx.settings
-        };
-
-        // Find the endpoint handler
-        const endpoints = backendGlobal && backendGlobal.httpHandler && backendGlobal.httpHandler.endpoints;
-        const handler = Array.isArray(endpoints)
-            ? endpoints.find(function (ep) { return ep && ep.method === 'POST' && ep.path === 'set-custom-field-value'; })
-            : null;
-
-        if (handler && typeof handler.handle === 'function') {
-            handler.handle(mockCtx);
-        }
-
-        // Verify and fallback if needed
-        const fld = issue.project.findFieldByName(fieldName);
-        if (fld) {
-            const valObj = issue.fields && issue.fields[fld.name];
-            const current = (valObj && typeof valObj.name === 'string') ? valObj.name : null;
-            if (current !== fieldValue) {
-                // Fallback: ensure value exists and set
-                let v = fld.findValueByName(fieldValue);
-                if (!v) { fld.createValue(fieldValue); v = fld.findValueByName(fieldValue); }
-                if (v) { issue.fields[fld.name] = v; }
-            }
-        }
-    } catch (e) {
-        // Log and fallback
-        logError('Endpoint set-custom-field-value failed, using direct fallback', e);
-        // As a last resort, attempt direct set to not break user flow
-        try {
-            const issue = entities.Issue.findById(issueId);
-            if (!issue || !issue.project) { return; }
-            const fld = issue.project.findFieldByName(fieldName);
-            if (!fld) { return; }
-            let v = fld.findValueByName(fieldValue);
-            if (!v) { fld.createValue(fieldValue); v = fld.findValueByName(fieldValue); }
-            if (v) { issue.fields[fld.name] = v; }
-        } catch (fallbackErr) {
-            logError('Failed to set custom field via endpoint and direct fallback', fallbackErr);
-        }
+        // eslint-disable-next-line no-console
+        console.log('[ReleaseManager][Backend] Issue', issueId, 'added to release', rv.version || rv.id);
     }
 }
 
@@ -310,6 +222,7 @@ function trySetFieldViaEndpointOrDirect(ctx, issueId, fieldName, fieldValue) {
 function removeIssueFromOtherReleases(ctx, issueId, exceptReleaseId) {
     const releaseVersions = getReleaseVersions(ctx);
     let changed = false;
+    let removedFrom = [];
     for (let i = 0; i < releaseVersions.length; i++) {
         if (exceptReleaseId && releaseVersions[i].id === exceptReleaseId) { continue; }
         const before = Array.isArray(releaseVersions[i].linkedIssues) ? releaseVersions[i].linkedIssues : [];
@@ -317,14 +230,19 @@ function removeIssueFromOtherReleases(ctx, issueId, exceptReleaseId) {
         if (after.length !== before.length) {
             releaseVersions[i].linkedIssues = after;
             changed = true;
+            removedFrom.push(releaseVersions[i].version || releaseVersions[i].id);
         }
     }
-    if (changed) { saveReleaseVersions(ctx, releaseVersions); }
+    if (changed) {
+        saveReleaseVersions(ctx, releaseVersions);
+        // eslint-disable-next-line no-console
+        console.log('[ReleaseManager][Backend] Issue', issueId, 'removed from releases', removedFrom.join(', ') || '<none>');
+    }
 }
 
 /**
  * Updates a release by id. Extracted from the HTTP handler for reuse.
- * Also detects newly added issues and assigns custom field values accordingly.
+ * Also detects newly added issues and ensures they are properly linked.
  * @param {Object} ctx
  * @param {string} id
  * @param {Object} updatedReleaseVersion
@@ -351,7 +269,7 @@ function updateReleaseById(ctx, id, updatedReleaseVersion) {
 
     if (!saveReleaseVersions(ctx, releaseVersions)) { return null; }
 
-    // Detect newly added issues and set custom field
+    // Detect newly added issues and ensure proper linking
     try {
         const currIds = (updatedReleaseVersion.linkedIssues || []).map(function(x){ return x && x.id; }).filter(Boolean);
         for (let i = 0; i < currIds.length; i++) {
@@ -383,11 +301,15 @@ function updateReleasesForIssueByVersion(ctx, issue, versionValue) {
     if (!release) {
         // remove from all
         removeIssueFromOtherReleases(ctx, issueId, null);
+        // eslint-disable-next-line no-console
+        console.log('[ReleaseManager][Backend] No matching release found for value', versionValue || '<empty>', '— issue', issueId, 'removed from all releases');
         return;
     }
     // add to one and remove from others
     addIssueToRelease(ctx, release.id, issueId, (issue && issue.summary) || '');
     removeIssueFromOtherReleases(ctx, issueId, release.id);
+    // eslint-disable-next-line no-console
+    console.log('[ReleaseManager][Backend] Issue', issueId, 'linked to release', release.version, 'and removed from other releases');
 }
 
 /**
