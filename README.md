@@ -84,13 +84,13 @@ The app ships as a widget for PROJECT_SETTINGS and uses a lightweight backend to
 
 ## Backend Endpoints
 Project-scoped (src/backend.js):
-- GET /backend/config → { manualIssueManagement, metaIssuesEnabled }
+- GET /backend/config → { manualIssueManagement, metaIssuesEnabled, customFieldsMapping }
 - GET /backend/permissions → { isManager, isLightManager }
-- GET /backend/app-settings → progress settings and tags (stored under `products` for backward compatibility)
-- PUT /backend/app-settings → update settings; requires at least one customFieldName
+- GET /backend/app-settings → progress settings, tags (stored under `products` for backward compatibility), and customFieldMapping
+- PUT /backend/app-settings → update settings; requires at least one customFieldName in customFieldNames
 - GET /backend/releases → list of releases
 - GET /backend/release?id=… → single release
-- POST /backend/releases → create release (validates fields, assigns id)
+- POST /backend/releases → create release (validates fields, assigns id; also creates a value in the mapped planned release custom field when custom field mapping is enabled)
 - PUT /backend/release?id=… → update release (validates, preserves id)
 - DELETE /backend/release?id=… → delete release
 - GET /backend/issue-statuses → { issueStatuses, testStatuses }
@@ -98,9 +98,11 @@ Project-scoped (src/backend.js):
 - PUT /backend/issue-test-status → set test status (Tested|Not tested|Test NA); only meaningful when issue is Fixed/Merged
 - GET /backend/expanded-version → { expandedVersion }
 - PUT /backend/expanded-version → store per-user expanded version id
+- POST /backend/custom-field-set → set a single-valued custom field on an issue to the given value
 
 Global (src/backend-global.js):
 - GET /backend-global/issue?issueId=… → { id, summary, state, subtasks }
+- POST /backend-global/issues-batch → [{ found, issue } | { found: false, issueId }] for a list of issueIds
 - GET /backend-global/issue-field?issueId=…&fieldName=… → resolve field value (supports multiple candidate names, case-insensitive)
 - GET /backend-global/issue-field-exists?issueId=…&fieldName=… → { exists, resolvedName }
 - GET /backend-global/issue-field-bulk?issueId=…&fieldName=… → per-issue values for parent and subtasks using the resolved field name
