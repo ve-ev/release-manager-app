@@ -180,17 +180,6 @@ function getAppSettings(ctx) {
 }
 
 /**
- * Replaces ${version} placeholder in a template string
- * @param {string} template
- * @param {string} version
- * @returns {string}
- */
-function applyVersionTemplate(template, version) {
-    const tpl = typeof template === 'string' && template.length > 0 ? template : '${version}';
-    return tpl.replace(/\$\{\s*version\s*}/g, String(version || ''));
-}
-
-/**
  * Finds a release by its display version value
  * @param {Object} ctx
  * @param {string} version
@@ -227,10 +216,9 @@ function addIssueToRelease(ctx, releaseId, issueId, issueSummary) {
             const settings = getAppSettings(ctx);
             const mapping = (settings && settings.customFieldMapping) || {};
             const fieldName = mapping.plannedReleaseField;
-            if (fieldName) {
-                const valueStr = applyVersionTemplate(mapping.valueTemplate, rv.version);
-                // Try via endpoint first, then fallback to direct set
-                trySetFieldViaEndpointOrDirect(ctx, issueId, fieldName, valueStr);
+            if (fieldName && rv.version) {
+                // Use version directly as the field value
+                trySetFieldViaEndpointOrDirect(ctx, issueId, fieldName, rv.version);
             }
         } catch (e) {
             logError('Failed to set custom field after adding issue to release', e);
@@ -488,9 +476,7 @@ exports.httpHandler = {
                     }
                     // Ensure custom field mapping object exists; preserve if already present
                     if (!progressSettings.customFieldMapping || typeof progressSettings.customFieldMapping !== 'object') {
-                        progressSettings.customFieldMapping = { valueTemplate: '${version}' };
-                    } else if (!progressSettings.customFieldMapping.valueTemplate) {
-                        progressSettings.customFieldMapping.valueTemplate = '${version}';
+                        progressSettings.customFieldMapping = {};
                     }
                     if (!Array.isArray(progressSettings.customFieldNames)) { progressSettings.customFieldNames = []; }
                     if (!Array.isArray(progressSettings.products)) { progressSettings.products = []; }
@@ -593,6 +579,29 @@ exports.httpHandler = {
                     releaseVersions.push(releaseVersion);
 
                     if (saveReleaseVersions(ctx, releaseVersions)) {
+                        // After creating release version, create custom field value if custom field mapping is configured
+                        try {
+                            const appSettings = getAppSettings(ctx);
+                            let settings = appSettings;
+                            if (typeof appSettings === 'string') {
+                                settings = JSON.parse(appSettings);
+                            }
+
+                            const fieldName = settings && settings.customFieldMapping && settings.customFieldMapping.plannedReleaseField;
+                            if (fieldName && releaseVersion.version) {
+                                const field = ctx.project.findFieldByName(fieldName);
+                                if (field) {
+                                    const existingValue = field.findValueByName(releaseVersion.version);
+                                    if (!existingValue) {
+                                        field.createValue(releaseVersion.version);
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            // Log error but don't fail the release creation
+                            logError('Failed to create custom field value for new release', e);
+                        }
+
                         ctx.response.code = HTTP_STATUS.CREATED;
                         ctx.response.json(releaseVersion);
                     } else {
@@ -824,17 +833,40 @@ exports.httpHandler = {
             path: 'custom-field-set',
             scope: 'project',
             handle: function handle(ctx) {
-                const payload = ctx.request.json();
-                const issue = entities.Issue.findById(payload.issueId)
-                const field = issue.project.findFieldByName(payload.fieldName)
-                if (field) {
-                    const value = field.findValueByName(payload.value)
-                    if (!value) {
-                        field.createValue(payload.value);
+                try {
+                    const payload = ctx.request.json();
+                    const issue = entities.Issue.findById(payload.issueId);
+                    if (!issue) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue not found');
+                        return;
                     }
-                    issue.fields[field.name] = value;
-                } else {
-                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field not found');
+                    const field = issue.project.findFieldByName(payload.fieldName);
+                    if (!field) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field not found');
+                        return;
+                    }
+
+                    // Handle empty value (clear field)
+                    if (!payload.value || payload.value === '') {
+                        issue.fields[field.name] = null;
+                        ctx.response.json({ success: true });
+                        return;
+                    }
+
+                    // Check if value already exists in field's allowed values
+                    const existingValue = field.findValueByName(payload.value);
+
+                    if (!existingValue) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Custom field value does not exist. Please create it first.');
+                        return;
+                    }
+
+                    // Set the field value on the issue
+                    issue.fields[field.name] = existingValue;
+                    ctx.response.json({ success: true });
+                } catch (error) {
+                    logError('Failed to set custom field', error);
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
                 }
             }
         }

@@ -1,4 +1,4 @@
-import React, {memo, useCallback, useState, useMemo} from 'react';
+import React, {memo, useCallback, useState, useMemo, useRef} from 'react';
 import Button from '@jetbrains/ring-ui-built/components/button/button';
 import {H1} from '@jetbrains/ring-ui-built/components/heading/heading';
 import Alert from '@jetbrains/ring-ui-built/components/alert/alert';
@@ -70,6 +70,63 @@ const AppComponent: React.FunctionComponent = () => {
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
+  // Track in-flight custom field updates to prevent duplicates
+  const pendingCustomFieldUpdates = useRef<Set<string>>(new Set());
+
+  // Helper function to update custom field with deduplication
+  const updateIssueCustomField = useCallback(async (issueId: string, fieldName: string, value: string) => {
+    const key = `${issueId}:${fieldName}`;
+
+    // Skip if already in progress
+    if (pendingCustomFieldUpdates.current.has(key)) {
+      logger.debug('Skipping duplicate custom field update for', issueId);
+      return;
+    }
+
+    // Mark as in progress
+    pendingCustomFieldUpdates.current.add(key);
+
+    try {
+      await api.setIssueCustomField(issueId, fieldName, value);
+    } catch (err) {
+      logger.error('Failed to set custom field for issue', issueId, err);
+    } finally {
+      // Clean up after completion
+      pendingCustomFieldUpdates.current.delete(key);
+    }
+  }, []);
+
+  // Helper function to compute added and removed issues between two release versions
+  const computeIssueChanges = useCallback((
+    previousIssues: Array<{id: string; isMeta?: boolean}> | undefined,
+    updatedIssues: Array<{id: string; isMeta?: boolean}> | undefined
+  ) => {
+    const prevIds = new Set((previousIssues || []).map(it => it.id));
+    const updatedIds = new Set((updatedIssues || []).filter(it => !it.isMeta).map(it => it.id));
+
+    const newlyAdded = (updatedIssues || []).filter(it => !it.isMeta && !prevIds.has(it.id));
+    const removed = (previousIssues || []).filter(it => !it.isMeta && !updatedIds.has(it.id));
+
+    return { newlyAdded, removed };
+  }, []);
+
+  // Helper function to handle custom field updates for added/removed issues
+  const handleCustomFieldUpdates = useCallback(async (
+    newlyAdded: Array<{id: string}>,
+    removed: Array<{id: string}>,
+    releaseVersion: string,
+    plannedReleaseField: string
+  ) => {
+    // Use release version directly as the field value
+    if (newlyAdded.length > 0) {
+      await Promise.all(newlyAdded.map(it => updateIssueCustomField(it.id, plannedReleaseField, releaseVersion)));
+    }
+
+    if (removed.length > 0) {
+      await Promise.all(removed.map(it => updateIssueCustomField(it.id, plannedReleaseField, '')));
+    }
+  }, [updateIssueCustomField]);
+
   // Release notes dialog state
   const [showReleaseNotesDialog, setShowReleaseNotesDialog] = useState<boolean>(false);
   const [releaseNotesText, setReleaseNotesText] = useState<string>('');
@@ -83,10 +140,27 @@ const AppComponent: React.FunctionComponent = () => {
         // Update existing release version
         await api.updateReleaseVersion(releaseVersion);
         setAlertMessage('Release version updated successfully');
+
+        // After updating, handle custom field changes for added/removed issues
+        const plannedReleaseField = settings.customFieldMapping?.plannedReleaseField;
+        if (config.customFieldsMapping && plannedReleaseField && currentReleaseVersion) {
+          const { newlyAdded, removed } = computeIssueChanges(
+            currentReleaseVersion.plannedIssues,
+            releaseVersion.plannedIssues
+          );
+          await handleCustomFieldUpdates(newlyAdded, removed, releaseVersion.version || '', plannedReleaseField);
+        }
       } else {
         // Create new release version
         await api.createReleaseVersion(releaseVersion);
         setAlertMessage('Release version created successfully');
+
+        // After creating a new release, set custom field on all added issues
+        const plannedReleaseField = settings.customFieldMapping?.plannedReleaseField;
+        if (config.customFieldsMapping && plannedReleaseField) {
+          const issuesToUpdate = (releaseVersion.plannedIssues || []).filter(it => !it.isMeta);
+          await handleCustomFieldUpdates(issuesToUpdate, [], releaseVersion.version || '', plannedReleaseField);
+        }
       }
 
       // Refresh release versions and close form
@@ -101,7 +175,7 @@ const AppComponent: React.FunctionComponent = () => {
       setAlertMessage('Failed to save release version. Please try again.');
       // Don't rethrow - handle gracefully with user feedback
     }
-  }, [fetchReleaseVersions]);
+  }, [fetchReleaseVersions, settings.customFieldMapping?.plannedReleaseField, config.customFieldsMapping, currentReleaseVersion, computeIssueChanges, handleCustomFieldUpdates]);
 
   // Handle confirming delete
   const handleConfirmDelete = useCallback((releaseVersion: ReleaseVersion) => {
@@ -184,24 +258,21 @@ const AppComponent: React.FunctionComponent = () => {
       await api.updateReleaseVersion(updated);
       await fetchReleaseVersions();
 
-      // After adding issues, optionally set a custom field on those newly added issues
+      // After adding/removing issues, optionally set/reset custom field
       const plannedReleaseField = settings.customFieldMapping?.plannedReleaseField;
-      if (plannedReleaseField) {
-        const prevIds = new Set((activeItemForAddIssue?.plannedIssues || []).map(it => it.id));
-        const newlyAdded = (updated.plannedIssues || []).filter(it => !it.isMeta && !prevIds.has(it.id));
-
-        if (newlyAdded.length > 0) {
-          const valueTemplate = settings.customFieldMapping?.valueTemplate || '${version}';
-          const fieldValue = valueTemplate.replace('${version}', updated.version || '');
-          // Fire and forget; errors are logged but do not interrupt UX
-          await Promise.all(newlyAdded.map(it => api.setIssueCustomField(it.id, plannedReleaseField, fieldValue).catch(err => logger.error('Failed to set custom field for issue', it.id, err))));
-        }
+      // Respect feature flag: only perform when Custom Fields Mapping feature is enabled
+      if (config.customFieldsMapping && plannedReleaseField) {
+        const { newlyAdded, removed } = computeIssueChanges(
+          activeItemForAddIssue?.plannedIssues,
+          updated.plannedIssues
+        );
+        await handleCustomFieldUpdates(newlyAdded, removed, updated.version || '', plannedReleaseField);
       }
     } catch (e) {
       logger.error('Failed to update release version while adding/removing issue', e);
       setAlertMessage('Failed to update planned issues');
     }
-  }, [fetchReleaseVersions, settings.customFieldMapping?.plannedReleaseField, settings.customFieldMapping?.valueTemplate, activeItemForAddIssue]);
+  }, [fetchReleaseVersions, settings.customFieldMapping?.plannedReleaseField, config.customFieldsMapping, activeItemForAddIssue?.plannedIssues, computeIssueChanges, handleCustomFieldUpdates]);
 
   // Handle canceling the form
   const handleCancelForm = useCallback(() => {

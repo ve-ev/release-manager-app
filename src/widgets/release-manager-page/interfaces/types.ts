@@ -22,8 +22,6 @@ export interface AppSettings {
   // Custom Field Mapping feature config
   customFieldMapping?: {
     plannedReleaseField?: string; // name or ID
-    releasedField?: string; // name or ID
-    valueTemplate?: string; // default: ${version}
   }
 }
 
