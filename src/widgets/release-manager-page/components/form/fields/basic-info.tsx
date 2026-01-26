@@ -6,7 +6,7 @@ import {Size} from '@jetbrains/ring-ui-built/components/input/input';
 import Select, {SelectItem} from '@jetbrains/ring-ui-built/components/select/select';
 import {ReleaseVersion} from '../../../interfaces';
 import {api} from '../../../app.tsx';
-import {useProductOptions} from '../../../hooks/useProductOptions';
+import {useTagOptions} from '../../../hooks';
 import {RELEASE_STATUS_OPTIONS} from '../../../utils/constants';
 
 // Import CSS classes
@@ -32,16 +32,16 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
   versionError,
   releaseDateError
 }) => {
-  // Use custom hook to fetch and manage product options
-  const productOptions = useProductOptions(api);
+  // Use custom hook to fetch and manage tag options (backed by products in settings)
+  const productOptions = useTagOptions(api);
 
-  // Handle product selection
+  // Handle tag selection
   const handleProductSelect = useCallback((selected: SelectItem<{key: string, label: string}> | null) => {
     if (selected) {
       // Create a synthetic event to match the handleInputChange signature
       const syntheticEvent = {
         target: {
-          name: 'product',
+          name: 'product', // underlying field name kept for backward compatibility
           value: selected.key
         }
       } as React.ChangeEvent<HTMLInputElement>;
@@ -51,7 +51,7 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
       // Handle null case (when selection is cleared)
       const syntheticEvent = {
         target: {
-          name: 'product',
+          name: 'product', // underlying field name kept for backward compatibility
           value: ''
         }
       } as React.ChangeEvent<HTMLInputElement>;
@@ -59,7 +59,7 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
       handleInputChange(syntheticEvent);
     }
   }, [handleInputChange]);
-  
+
   // Handle status selection
   const handleStatusSelect = useCallback((selected: SelectItem<{key: string, label: string}> | null) => {
     if (selected) {
@@ -93,7 +93,7 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
             <Col xs={12} sm={6}>
               <div>
                 <Select
-                  selectedLabel="Product *"
+                  selectedLabel="Tag"
                   data={productOptions}
                   selected={productOptions.find(option => option.key === formData.product)}
                   onSelect={handleProductSelect}
@@ -137,7 +137,7 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
           </Col>
         )}
       </Row>
-      
+
       <Row>
         <Col xs={12} sm={6}>
           <div>

@@ -3,7 +3,7 @@ import Loader from '@jetbrains/ring-ui-built/components/loader/loader';
 import '../../styles/version-table.css';
 /* eslint-disable complexity */
 
-/** Sort types for table headers */
+/** Sort types for table headers (product key used for tag column for backward compatibility) */
 export type SortKey = 'product' | 'version' | 'progress' | 'status' | 'releaseDate' | 'featureFreezeDate';
 export type SortDirection = 'asc' | 'desc';
 
@@ -16,6 +16,7 @@ export const TableHeader: React.FC<{
   sortKey: SortKey;
   sortDirection: SortDirection;
   onSort: (key: SortKey) => void;
+// eslint-disable-next-line react/prop-types
 }> = memo(({ showProductColumn = true, showProgressColumn = true, sortKey, sortDirection, onSort }) => {
   const renderCol = (label: string, key?: SortKey, className = '') => {
     const isActive = Boolean(key && sortKey === key);
@@ -53,7 +54,7 @@ export const TableHeader: React.FC<{
   return (
     <div className="version-list-header">
       <div className="version-list-header-cell expand-cell"/>
-      {showProductColumn ? renderCol('Product', 'product', 'product-cell') : null}
+      {showProductColumn ? renderCol('Tag', 'product', 'product-cell') : null}
       {renderCol('Version', 'version', 'version-cell')}
       {showProgressColumn ? renderCol('Progress', 'progress', 'progress-cell') : null}
       {renderCol('Status', 'status', 'status-cell')}

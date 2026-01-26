@@ -3,8 +3,8 @@
   "title": "Release Manager",
   "description": "Plan, track, and communicate product releases with version management, progress tracking, and release notes generation.",
   "$schema": "https://json.schemastore.org/youtrack-app.json",
-  "version": "1.1.2",
-  "changeNotes": "<h3>Version 1.1.2</h3>\n<ul>\n    <li><b>Feature:</b> Generic Add Issue Action for quickly adding any issue to a release from the table</li>\n    <li><b>Feature:</b> Project Custom Field Mapping: connect a custom field to Release Manager so issues are linked to releases right from the issue view. The workflow rule updates releases automatically when this field changes.</li>\n</ul>\n",
+  "version": "1.1.3",
+  "changeNotes": "<h3>Version 1.1.3</h3>\n<ul>\n    <li><b>Feature:</b> Generic Add Issue Action for quickly adding any issue to a release from the table</li>\n    <li><b>Feature:</b> Project Custom Field Mapping: connect a custom field to Release Manager so issues are linked to releases right from the issue view. The workflow rule updates releases automatically when this field changes.</li>\n</ul>\n",
   "vendor": {
     "name": "E.V",
     "url": "https://github.com/ve-ev/release-manager-app"

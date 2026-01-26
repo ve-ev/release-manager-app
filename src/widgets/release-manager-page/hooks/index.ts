@@ -3,7 +3,7 @@ export { useAppSettings } from './useAppSettings';
 export { useAppConfig } from './useAppConfig';
 export { usePermissions } from './usePermissions';
 export { useExpandedState } from './useExpandedState';
-export { useProductOptions } from './useProductOptions';
+export { useTagOptions } from './useTagOptions.ts';
 export { useSettingsData } from './useSettingsData';
 export { useInitialRelatedIssues } from './useInitialRelatedIssues';
 export { useIssueSearch } from './useIssueSearch';
