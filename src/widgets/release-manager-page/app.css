@@ -6,6 +6,7 @@
   padding: calc(var(--ring-unit) * 2);
   max-width: 1200px;
   min-height: 800px;
+  min-width: 1000px;
   width: 100%;
   box-sizing: border-box;
   margin-left: auto;
