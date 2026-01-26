@@ -2,6 +2,9 @@
   display: flex;
   flex-direction: column;
   width: 100%;
+  /* Hard minimum table width to prevent the grid (and expanded content) from becoming too narrow */
+  --table-min-width: 1000px;
+  min-width: var(--table-min-width);
   /*
     Provide table sizing variables to non-grid descendants too
     (e.g. `.version-list-item::after` separators and expandable sections).
@@ -25,6 +28,7 @@
   align-items: center;
   min-height: calc(var(--ring-unit) * 3);
   width: 100%;
+  min-width: var(--table-min-width);
   box-sizing: border-box;
   position: sticky;
   top: 0;
@@ -116,6 +120,7 @@
   border-bottom: none;
   position: relative;
   width: 100%;
+  min-width: var(--table-min-width);
   box-sizing: border-box;
 }
 
@@ -137,6 +142,8 @@
   min-height: calc(var(--ring-unit) * 8);
   /* Match header sizing: ensure rows always span the full container width */
   width: 100%;
+  min-width: var(--table-min-width);
+  align-self: stretch;
   box-sizing: border-box;
 }
 
