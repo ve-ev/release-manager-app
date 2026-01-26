@@ -634,6 +634,32 @@ function updateReleaseById(ctx, id, updatedReleaseVersion) {
     const now = new Date().toISOString();
     const auditEvents = Array.isArray(prev.auditEvents) ? prev.auditEvents.slice() : [];
 
+    const releaseInfo = {
+        releaseId: id,
+        releaseVersion: (updatedReleaseVersion && (updatedReleaseVersion.version || updatedReleaseVersion.id)) || prev.version || prev.id || id
+    };
+
+    const MAX_AUDIT_TEXT_LEN = 500;
+
+    const truncate = function (s, maxLen) {
+        if (typeof s !== 'string') { return s; }
+        const m = (typeof maxLen === 'number' && maxLen > 0) ? maxLen : MAX_AUDIT_TEXT_LEN;
+        if (s.length <= m) { return s; }
+        return s.slice(0, m) + '…';
+    };
+
+    const buildPlannedIssuesSnapshot = function (rv) {
+        const items = (rv && rv.plannedIssues) ? rv.plannedIssues : [];
+        const out = [];
+        for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            if (it && it.id) {
+                out.push({ id: it.id, summary: it.summary || '' });
+            }
+        }
+        return out;
+    };
+
     const prevFreezeConfirmed = !!prev.freezeConfirmed;
     const freezeConfirmRequestedNow = !!updatedReleaseVersion.freezeConfirmed && !prevFreezeConfirmed;
     const unfreezeRequested = prevFreezeConfirmed && updatedReleaseVersion.freezeConfirmed === false;
@@ -660,6 +686,8 @@ function updateReleaseById(ctx, id, updatedReleaseVersion) {
             type: 'STATUS_CHANGED',
             at: now,
             by: by,
+            releaseId: releaseInfo.releaseId,
+            releaseVersion: releaseInfo.releaseVersion,
             fromStatus: prev.status,
             toStatus: updatedReleaseVersion.status
         });
@@ -681,7 +709,14 @@ function updateReleaseById(ctx, id, updatedReleaseVersion) {
     // Apply feature freeze confirmation (locks issue membership but does NOT freeze progress)
     if (freezeConfirmRequestedNow) {
         updatedReleaseVersion.freezeConfirmed = true;
-        auditEvents.push({ type: 'FREEZE_CONFIRMED', at: now, by: by });
+        auditEvents.push({
+            type: 'FREEZE_CONFIRMED',
+            at: now,
+            by: by,
+            releaseId: releaseInfo.releaseId,
+            releaseVersion: releaseInfo.releaseVersion,
+            plannedIssuesSnapshot: buildPlannedIssuesSnapshot(updatedReleaseVersion)
+        });
     }
 
     // Apply unfreeze (explicit action): unlock issue membership
@@ -689,7 +724,90 @@ function updateReleaseById(ctx, id, updatedReleaseVersion) {
         updatedReleaseVersion.freezeConfirmed = false;
         updatedReleaseVersion.freezeTimestamp = undefined;
         updatedReleaseVersion.snapshot = undefined;
-        auditEvents.push({ type: 'UNFROZEN', at: now, by: by });
+        auditEvents.push({ type: 'UNFROZEN', at: now, by: by, releaseId: releaseInfo.releaseId, releaseVersion: releaseInfo.releaseVersion });
+    }
+
+    // Audit: planned issues list changes
+    try {
+        const prevPlannedIdsAudit = (prev.plannedIssues || []).map(function (x) { return x && x.id; }).filter(Boolean);
+        const currPlannedIdsAudit = (updatedReleaseVersion.plannedIssues || []).map(function (x) { return x && x.id; }).filter(Boolean);
+        const sameArrayAudit = function (a, b) {
+            if (a.length !== b.length) { return false; }
+            for (let i = 0; i < a.length; i++) {
+                if (a[i] !== b[i]) { return false; }
+            }
+            return true;
+        };
+
+        if (!sameArrayAudit(prevPlannedIdsAudit, currPlannedIdsAudit)) {
+            const prevById = {};
+            const currById = {};
+            const prevItems = prev.plannedIssues || [];
+            const currItems = updatedReleaseVersion.plannedIssues || [];
+            for (let p = 0; p < prevItems.length; p++) {
+                if (prevItems[p] && prevItems[p].id) { prevById[prevItems[p].id] = prevItems[p]; }
+            }
+            for (let c = 0; c < currItems.length; c++) {
+                if (currItems[c] && currItems[c].id) { currById[currItems[c].id] = currItems[c]; }
+            }
+
+            const prevSet = {};
+            const currSet = {};
+            for (let i = 0; i < prevPlannedIdsAudit.length; i++) { prevSet[prevPlannedIdsAudit[i]] = true; }
+            for (let j = 0; j < currPlannedIdsAudit.length; j++) { currSet[currPlannedIdsAudit[j]] = true; }
+            const added = [];
+            const removed = [];
+            const addedIssues = [];
+            const removedIssues = [];
+            for (let k = 0; k < currPlannedIdsAudit.length; k++) {
+                const idv = currPlannedIdsAudit[k];
+                if (!prevSet[idv]) {
+                    added.push(idv);
+                    const it = currById[idv];
+                    addedIssues.push({ id: idv, summary: (it && it.summary) ? it.summary : '' });
+                }
+            }
+            for (let m = 0; m < prevPlannedIdsAudit.length; m++) {
+                const idv2 = prevPlannedIdsAudit[m];
+                if (!currSet[idv2]) {
+                    removed.push(idv2);
+                    const it2 = prevById[idv2];
+                    removedIssues.push({ id: idv2, summary: (it2 && it2.summary) ? it2.summary : '' });
+                }
+            }
+            const plannedReordered = (added.length === 0 && removed.length === 0);
+
+            auditEvents.push({
+                type: 'PLANNED_ISSUES_CHANGED',
+                at: now,
+                by: by,
+                releaseId: releaseInfo.releaseId,
+                releaseVersion: releaseInfo.releaseVersion,
+                plannedIssuesSnapshot: buildPlannedIssuesSnapshot(updatedReleaseVersion),
+                fromPlannedCount: prevPlannedIdsAudit.length,
+                toPlannedCount: currPlannedIdsAudit.length,
+                addedPlannedIssueIds: added,
+                removedPlannedIssueIds: removed,
+                addedPlannedIssues: addedIssues,
+                removedPlannedIssues: removedIssues,
+                plannedReordered: plannedReordered
+            });
+        }
+    } catch {
+        // ignore audit generation errors
+    }
+
+    // Audit: description changes
+    if ((updatedReleaseVersion.description || '') !== (prev.description || '')) {
+        auditEvents.push({
+            type: 'DESCRIPTION_CHANGED',
+            at: now,
+            by: by,
+            releaseId: releaseInfo.releaseId,
+            releaseVersion: releaseInfo.releaseVersion,
+            fromDescription: truncate(prev.description || '', MAX_AUDIT_TEXT_LEN),
+            toDescription: truncate(updatedReleaseVersion.description || '', MAX_AUDIT_TEXT_LEN)
+        });
     }
 
     // Enforce membership immutability after feature freeze confirmation
@@ -737,7 +855,14 @@ function updateReleaseById(ctx, id, updatedReleaseVersion) {
             return null;
         }
 
-        auditEvents.push({ type: 'RELEASED_LOCKED', at: now, by: by });
+        auditEvents.push({
+            type: 'RELEASE_COMPLETED',
+            at: now,
+            by: by,
+            releaseId: releaseInfo.releaseId,
+            releaseVersion: releaseInfo.releaseVersion,
+            plannedIssuesSnapshot: buildPlannedIssuesSnapshot(updatedReleaseVersion)
+        });
     }
 
     // Always persist audit events

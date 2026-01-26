@@ -98,11 +98,38 @@ export interface FrozenProgressSnapshot {
 }
 
 export interface ReleaseAuditEvent {
-  type: 'FREEZE_CONFIRMED' | 'UNFROZEN' | 'STATUS_CHANGED' | 'RELEASED_LOCKED' | 'SNAPSHOT_REGENERATED';
+  type:
+    | 'FREEZE_CONFIRMED'
+    | 'UNFROZEN'
+    | 'STATUS_CHANGED'
+    | 'RELEASE_COMPLETED'
+    | 'SNAPSHOT_REGENERATED'
+    | 'PLANNED_ISSUES_CHANGED'
+    | 'DESCRIPTION_CHANGED';
   at: string;
   by?: string;
+  /** Release identifier for cross-referencing audit entries (optional for backward compatibility). */
+  releaseId?: string;
+  /** Human-readable release version (optional for backward compatibility). */
+  releaseVersion?: string;
   fromStatus?: ReleaseStatus;
   toStatus?: ReleaseStatus;
+
+  /** Issue snapshot at the moment of the event (when applicable). */
+  plannedIssuesSnapshot?: Array<{ id: string; summary?: string }>;
+
+  /** For `PLANNED_ISSUES_CHANGED`. */
+  fromPlannedCount?: number;
+  toPlannedCount?: number;
+  addedPlannedIssueIds?: string[];
+  removedPlannedIssueIds?: string[];
+  addedPlannedIssues?: Array<{ id: string; summary?: string }>;
+  removedPlannedIssues?: Array<{ id: string; summary?: string }>;
+  plannedReordered?: boolean;
+
+  /** For `DESCRIPTION_CHANGED`. */
+  fromDescription?: string;
+  toDescription?: string;
 }
 
 export interface ReleaseVersion {
