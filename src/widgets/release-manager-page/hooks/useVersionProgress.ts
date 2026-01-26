@@ -3,6 +3,7 @@ import {API} from '../api';
 import {ReleaseVersion, AppSettings} from '../interfaces';
 import {getZoneForValue} from '../utils/progress-helpers';
 import type {IssueStatus} from './useIssueStatuses';
+import {logger} from '../utils/logger';
 
 interface ProgressData {
   green: number;
@@ -152,6 +153,22 @@ export function useVersionProgress(
   }, [hasManualStatuses]);
 
   useEffect(() => {
+    // Released releases: use stored snapshot exclusively
+    if (item.status === 'Released' && item.freezeTimestamp && item.snapshot) {
+      const p = item.snapshot.progress;
+      setMainProgress({
+        green: p.green,
+        yellow: p.yellow,
+        red: p.red,
+        grey: p.grey,
+        total: p.total
+      });
+      // Even if total is 0 (e.g., all issues were excluded at freeze), we still want the UI
+      // to render a stable frozen-state message instead of a loading/placeholder state.
+      setMainAvailable(true);
+      return;
+    }
+
     // Early exit only if there are no planned issues
     // We still need to process manual status overrides (Fixed/Merged) even without custom fields!
     if (filteredIds.length === 0) {
@@ -363,14 +380,13 @@ export function useVersionProgress(
         setMainProgress(aggregatedMain);
         setMainAvailable(mainAny);
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to calculate version progress:', error);
+        logger.error('Failed to calculate version progress:', error);
       }
     };
 
     fetchIssueData();
     // Include all memoized values in dependencies to ensure effect only runs when inputs change
-  }, [filteredIds, idToIssue, allIssueIdsToFetch, progressSettings, api, hasManualStatuses, issueStatusMap, statusesLoaded]);
+  }, [filteredIds, idToIssue, allIssueIdsToFetch, progressSettings, api, hasManualStatuses, issueStatusMap, statusesLoaded, item.freezeTimestamp, item.snapshot, item.status]);
 
   return {
     mainProgress,

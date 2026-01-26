@@ -1,4 +1,4 @@
-import React, {memo, useCallback, useState, useMemo, useRef} from 'react';
+import React, {memo, useCallback, useEffect, useState, useMemo, useRef} from 'react';
 import Button from '@jetbrains/ring-ui-built/components/button/button';
 import {H1} from '@jetbrains/ring-ui-built/components/heading/heading';
 import Alert from '@jetbrains/ring-ui-built/components/alert/alert';
@@ -11,6 +11,7 @@ import SettingsForm from './components/settings/settings-form.tsx';
 import {VersionTable} from './components/table/version-table.tsx';
 import ReleaseNotesDialog from './components/release-notes-dialog.tsx';
 import AddIssueDialog from './components/add-issue-dialog.tsx';
+import AuditEventsDialog from './components/audit-events-dialog.tsx';
 import {generateReleaseNotesMarkdown} from './utils/release-notes-utils.ts';
 import {EmptyState} from './components/empty-state.tsx';
 import {ErrorBoundary} from './components/error-boundary.tsx';
@@ -152,6 +153,72 @@ const AppComponent: React.FunctionComponent = () => {
   const [releaseNotesText, setReleaseNotesText] = useState<string>('');
   const [showAddIssueDialog, setShowAddIssueDialog] = useState<boolean>(false);
   const [activeItemForAddIssue, setActiveItemForAddIssue] = useState<ReleaseVersion | null>(null);
+
+  // Audit events dialog state
+  const [showAuditEventsDialog, setShowAuditEventsDialog] = useState<boolean>(false);
+  const [auditEventsVersion, setAuditEventsVersion] = useState<string>('');
+  const [auditEventsList, setAuditEventsList] = useState<ReleaseVersion['auditEvents']>([]);
+
+  // Release/unrelease confirmation dialog state
+  const [pendingReleaseStatusChange, setPendingReleaseStatusChange] = useState<{
+    item: ReleaseVersion;
+    newStatus: ReleaseVersion['status'];
+  } | null>(null);
+
+  useEffect(() => {
+    const handler = ((e: Event) => {
+      const ce = e as CustomEvent<{ version?: string; events?: ReleaseVersion['auditEvents'] }>;
+      const detail = ce?.detail || {};
+      // Audit logs are available only for release managers
+      if (!permissions.isReleaseManager) {
+        return;
+      }
+      setAuditEventsVersion(detail.version || '');
+      setAuditEventsList(detail.events || []);
+      setShowAuditEventsDialog(true);
+    }) as EventListener;
+    window.addEventListener('open-audit-events-dialog', handler);
+    return () => window.removeEventListener('open-audit-events-dialog', handler);
+  }, [permissions.isReleaseManager]);
+
+  useEffect(() => {
+    const handler = ((e: Event) => {
+      const ce = e as CustomEvent<{ item: ReleaseVersion; newStatus: ReleaseVersion['status'] }>;
+      const detail = ce?.detail;
+      if (!detail) { return; }
+      // Only release managers can release/unrelease
+      if (!permissions.isReleaseManager) {
+        return;
+      }
+      setPendingReleaseStatusChange({ item: detail.item, newStatus: detail.newStatus });
+    }) as EventListener;
+    window.addEventListener('request-release-status-change', handler);
+    return () => window.removeEventListener('request-release-status-change', handler);
+  }, [permissions.isReleaseManager]);
+
+  const handleConfirmedReleaseStatusChange = useCallback(async () => {
+    if (!pendingReleaseStatusChange) {
+      return;
+    }
+    const { item, newStatus } = pendingReleaseStatusChange;
+    try {
+      const updated = await api.updateReleaseVersion({ ...item, status: newStatus });
+      window.dispatchEvent(new CustomEvent('release-version-status-updated', {
+        detail: {
+          id: updated.id,
+          status: updated.status,
+          freezeConfirmed: updated.freezeConfirmed,
+          freezeTimestamp: updated.freezeTimestamp || null,
+          snapshot: updated.snapshot || null,
+          auditEvents: updated.auditEvents || null
+        }
+      }));
+    } catch (e) {
+      logger.error('Failed to change release status', e);
+    } finally {
+      setPendingReleaseStatusChange(null);
+    }
+  }, [pendingReleaseStatusChange]);
 
   // Handle creating or updating a release version
   const handleSaveReleaseVersion = useCallback(async (releaseVersion: ReleaseVersion) => {
@@ -342,6 +409,7 @@ const AppComponent: React.FunctionComponent = () => {
           host={host}
           canEdit={permissions.canEdit}
           canDelete={permissions.canDelete}
+          isReleaseManager={permissions.isReleaseManager}
           manualIssueManagement={config.manualIssueManagement}
           metaIssuesEnabled={config.metaIssuesEnabled}
           handleAddMetaIssue={handleAddMetaIssue}
@@ -359,6 +427,7 @@ const AppComponent: React.FunctionComponent = () => {
     permissions.canAccessSettings,
     permissions.canEdit,
     permissions.canDelete,
+    permissions.isReleaseManager,
     expandedReleaseVersions,
     toggleExpandReleaseVersion,
     handleEditReleaseVersion,
@@ -430,6 +499,20 @@ const AppComponent: React.FunctionComponent = () => {
         />
       ) : null}
 
+      {pendingReleaseStatusChange ? (
+        <Confirm
+          show
+          onConfirm={handleConfirmedReleaseStatusChange}
+          onReject={() => setPendingReleaseStatusChange(null)}
+          confirmLabel={pendingReleaseStatusChange.newStatus === 'Released' ? 'Release' : 'Change Status'}
+          rejectLabel="Cancel"
+          text={pendingReleaseStatusChange.newStatus === 'Released'
+            ? 'Are you sure you want to mark this release version as Released? This will freeze progress and lock edits until status is changed.'
+            : 'Are you sure you want to change status from Released? This will unlock the release version.'}
+          data-test="confirm-release-status-dialog"
+        />
+      ) : null}
+
       {alertMessage && (
         <Alert
           type={Alert.Type.SUCCESS}
@@ -452,6 +535,13 @@ const AppComponent: React.FunctionComponent = () => {
         open={showReleaseNotesDialog}
         notes={releaseNotesText}
         onClose={() => setShowReleaseNotesDialog(false)}
+      />
+
+      <AuditEventsDialog
+        open={showAuditEventsDialog}
+        version={auditEventsVersion}
+        events={(auditEventsList || []) as NonNullable<ReleaseVersion['auditEvents']>}
+        onClose={() => setShowAuditEventsDialog(false)}
       />
 
       <AddIssueDialog

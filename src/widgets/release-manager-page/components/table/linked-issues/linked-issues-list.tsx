@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {api} from '../../../app.tsx';
-import {AppSettings} from '../../../interfaces';
+import {AppSettings, FrozenProgressSnapshot} from '../../../interfaces';
 import {LinkedIssueItem, type SubtaskData} from './linked-issue-item.tsx';
 import type {IssueStatus, TestStatus} from '../../../hooks/useIssueStatuses';
 
@@ -22,6 +22,8 @@ interface PlannedIssuesListProps {
   statusesLoaded: boolean;
   setIssueStatus: (id: string, status: IssueStatus) => void;
   setTestStatus: (id: string, status: TestStatus) => void;
+  freezeTimestamp?: string;
+  snapshot?: FrozenProgressSnapshot;
 }
 
 const PlannedIssuesListComponent: React.FC<PlannedIssuesListProps> = ({
@@ -34,9 +36,34 @@ const PlannedIssuesListComponent: React.FC<PlannedIssuesListProps> = ({
   issueTestStatusMap,
   statusesLoaded,
   setIssueStatus,
-  setTestStatus
+  setTestStatus,
+  freezeTimestamp,
+  snapshot
 }) => {
   const [issueSubtasks, setIssueSubtasks] = useState<Record<string, SubtaskData>>({});
+  const isFrozen = !!freezeTimestamp && !!snapshot;
+
+  const frozenIssueDataMap = useMemo(() => {
+    if (!isFrozen) {
+      return {} as Record<string, SubtaskData>;
+    }
+    const map: Record<string, SubtaskData> = {};
+    // eslint-disable-next-line complexity
+    (snapshot?.issues || []).forEach(snap => {
+      const stValues = Array.isArray(snap.subtaskFieldValues) ? snap.subtaskFieldValues : [];
+      map[snap.id] = {
+        issueId: snap.id,
+        // For frozen view we only need IDs to keep UI layout stable.
+        subtasks: stValues.map(st => ({ id: st.id, idReadable: st.idReadable || st.id, summary: '', resolved: false, fields: [] })),
+        fieldValues: stValues.length > 0
+          ? stValues.map(st => ({ id: st.id, idReadable: st.idReadable || st.id, fieldValue: st.fieldValue ?? null }))
+          : [{ id: snap.id, idReadable: snap.idReadable || snap.id, fieldValue: snap.parentFieldValue ?? null }],
+        parentFieldValue: (typeof snap.parentFieldValue !== 'undefined') ? snap.parentFieldValue : null,
+        hasAnyFieldValue: (typeof snap.parentFieldValue !== 'undefined' && snap.parentFieldValue !== null) || stValues.some(v => v.fieldValue !== null)
+      };
+    });
+    return map;
+  }, [isFrozen, snapshot]);
   
   // Memoize empty progressSettings to prevent unnecessary re-renders
   const effectiveProgressSettings = React.useMemo(() => progressSettings || {
@@ -47,6 +74,12 @@ const PlannedIssuesListComponent: React.FC<PlannedIssuesListProps> = ({
   }, [progressSettings]);
 
   useEffect(() => {
+    // When release is frozen, do not fetch live issue field data.
+    if (isFrozen) {
+      // Populate issueSubtasks from snapshot so progress indicators do not change visually on freeze.
+      setIssueSubtasks(frozenIssueDataMap);
+      return;
+    }
     if (!issues || issues.length === 0) {
       return;
     }
@@ -91,6 +124,7 @@ const PlannedIssuesListComponent: React.FC<PlannedIssuesListProps> = ({
         );
 
         // Step 3: Process results for each issue
+        // eslint-disable-next-line complexity
         const results = issues.map(issue => {
           try {
             // Meta issue: aggregate related issues as pseudo-subtasks
@@ -163,7 +197,7 @@ const PlannedIssuesListComponent: React.FC<PlannedIssuesListProps> = ({
     };
 
     fetchAll();
-  }, [issues, progressSettings]);
+  }, [issues, progressSettings, isFrozen, frozenIssueDataMap]);
 
   if (!issues || issues.length === 0) {
     return null;
@@ -173,25 +207,30 @@ const PlannedIssuesListComponent: React.FC<PlannedIssuesListProps> = ({
 
   return (
     <div className="linked-issues-list">
+      {/* eslint-disable-next-line complexity */}
       {issues.map(issue => {
-        const status = issueStatusMap[issue.id] || 'Unresolved';
-        const testStatus = issueTestStatusMap[issue.id] || 'Not tested';
-        const issueData = issueSubtasks[issue.id];
+        const snapItem = isFrozen ? snapshot!.issues.find(it => it.id === issue.id) : undefined;
+        // After freeze, manual status/test management should remain available and reflect live overrides,
+        // but progress indicators must stay frozen (use snapshot-based issueData).
+        const status = issueStatusMap[issue.id] || (snapItem?.manualStatus as IssueStatus) || 'Unresolved';
+        const testStatus = issueTestStatusMap[issue.id] || (snapItem?.manualTestStatus as TestStatus) || 'Not tested';
+        const issueData = isFrozen ? frozenIssueDataMap[issue.id] : issueSubtasks[issue.id];
         return (
-                  <LinkedIssueItem
-                    key={issue.id}
-                    issue={issue}
-                    baseUrl={baseUrl}
-                    status={status}
-                    testStatus={testStatus}
-                    issueData={issueData}
-                    progressSettings={effectiveProgressSettings}
-                    manualIssueManagement={manualIssueManagement}
-                    canManage={!!canManage}
-                    onSetStatus={setIssueStatus}
-                    onSetTestStatus={setTestStatus}
-                    loadingStatuses={loadingStatuses}
-                  />
+          <LinkedIssueItem
+            key={issue.id}
+            issue={issue}
+            baseUrl={baseUrl}
+            status={status}
+            testStatus={testStatus}
+            issueData={issueData}
+            progressSettings={effectiveProgressSettings}
+            manualIssueManagement={manualIssueManagement}
+                    // Keep manual status management available after freeze (but Released still passes canManage=false from parent).
+            canManage={!!canManage}
+            onSetStatus={setIssueStatus}
+            onSetTestStatus={setTestStatus}
+            loadingStatuses={loadingStatuses}
+          />
         );
       })}
     </div>

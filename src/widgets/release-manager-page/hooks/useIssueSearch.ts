@@ -24,6 +24,7 @@ export function useIssueSearch(host: HostAPI): UseIssueSearchReturn {
   const [isLoadingIssues, setIsLoadingIssues] = useState<boolean>(false);
   const [searchError, setSearchError] = useState<string | undefined>(undefined);
 
+  // eslint-disable-next-line complexity
   const searchIssues = useCallback(async (input: string, existingIssues: IssueData[] = []): Promise<IssueData[]> => {
     setSearchError(undefined);
     

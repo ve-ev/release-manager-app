@@ -1,0 +1,84 @@
+.audit-events-overlay {
+  position: fixed;
+  inset: 0;
+  /* Use a stronger dim + slight blur so the dialog reads well on light/white pages */
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  /* Create containing block for the backdrop button */
+  /* (keep fixed; relative here would break full-screen positioning) */
+}
+
+.audit-events-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  z-index: 0;
+}
+
+.audit-events-panel {
+  width: min(900px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  background: var(--ring-content-background-color, #fff);
+  z-index: 1;
+}
+
+.audit-events-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ring-line-color);
+}
+
+.audit-events-header .title {
+  font-weight: 600;
+}
+
+.audit-events-container {
+  padding: 12px 16px;
+  overflow: auto;
+}
+
+.events-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.event-row {
+  display: grid;
+  grid-template-columns: 220px 200px 1fr;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+@media (max-width: 720px) {
+  .event-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.event-type {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.event-at {
+  opacity: 0.85;
+}
+
+.event-meta {
+  opacity: 0.9;
+}
+
+.audit-events-container .empty {
+  opacity: 0.8;
+}

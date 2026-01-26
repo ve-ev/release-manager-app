@@ -56,6 +56,55 @@ export interface MetaIssue {
   relatedIssueIds: string[];
 }
 
+export type FrozenZone = 'green' | 'yellow' | 'red' | 'grey';
+
+export interface FrozenIssueSnapshot {
+  id: string;
+  idReadable?: string;
+  summary: string;
+  isMeta?: boolean;
+  metaRelatedIssueIds?: string[];
+  // Manual override snapshot (if any)
+  manualStatus?: 'Unresolved' | 'Fixed' | 'Merged' | 'Discoped';
+  // Manual test status snapshot (if any)
+  manualTestStatus?: 'Tested' | 'Not tested' | 'Test NA';
+  // Resolved progress zone at freeze time (after considering manual override)
+  zone: FrozenZone;
+  // Raw field value used for zone computation (if any)
+  fieldName?: string;
+  fieldValue?: string | null;
+
+  /**
+   * For freezing expandable per-issue progress indicators.
+   * Matches what `LinkedIssueItem` uses: parent field value + a set of subtask field values.
+   */
+  parentFieldValue?: string | null;
+  subtaskFieldValues?: Array<{ id: string; idReadable?: string; fieldValue: string | null }>;
+}
+
+export interface FrozenProgressSnapshot {
+  capturedAt: string;
+  freezeTimestamp: string;
+  issues: FrozenIssueSnapshot[];
+  // Issues excluded from progress (e.g., Discoped)
+  excludedIssueIds: string[];
+  progress: {
+    green: number;
+    yellow: number;
+    red: number;
+    grey: number;
+    total: number;
+  };
+}
+
+export interface ReleaseAuditEvent {
+  type: 'FREEZE_CONFIRMED' | 'UNFROZEN' | 'STATUS_CHANGED' | 'RELEASED_LOCKED' | 'SNAPSHOT_REGENERATED';
+  at: string;
+  by?: string;
+  fromStatus?: ReleaseStatus;
+  toStatus?: ReleaseStatus;
+}
+
 export interface ReleaseVersion {
   id: string;
   version: string;
@@ -65,6 +114,12 @@ export interface ReleaseVersion {
   product?: string;
   status?: ReleaseStatus;
   freezeConfirmed?: boolean;
+  /** Immutable timestamp set when freeze is confirmed (ISO string). */
+  freezeTimestamp?: string;
+  /** Stored issue/progress snapshot captured at `freezeTimestamp`. */
+  snapshot?: FrozenProgressSnapshot;
+  /** Audit trail (append-only). */
+  auditEvents?: ReleaseAuditEvent[];
   plannedIssues?: PlannedOrMetaIssue[];
   linkedIssues?: PlannedOrMetaIssue[];
   // Dedicated meta issues collection (used by form); renderer may merge it into planned issues

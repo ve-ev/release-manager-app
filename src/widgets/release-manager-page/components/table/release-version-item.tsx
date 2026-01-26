@@ -5,6 +5,7 @@ import {api} from '../../app';
 import {isExpired} from '../../utils/date-utils';
 import '../../styles/version-table.css';
 import {useIssueStatuses} from '../../hooks';
+import type {IssueStatus, TestStatus} from '../../hooks/useIssueStatuses';
 import {STATUS_POLL_INTERVAL_MS} from '../../utils/constants';
 /* eslint-disable complexity */
 
@@ -33,6 +34,7 @@ export interface ReleaseVersionItemProps {
   host?: HostAPI;
   canEdit?: boolean;
   canDelete?: boolean;
+  isReleaseManager?: boolean;
   manualIssueManagement?: boolean;
   metaIssuesEnabled?: boolean;
   handleAddMetaIssue?: (releaseVersion: ReleaseVersion) => void;
@@ -62,26 +64,62 @@ const ReleaseVersionItemComponent: React.FC<ReleaseVersionItemProps> = ({
   showProgressColumn = true,
   canEdit,
   canDelete,
+  isReleaseManager,
   manualIssueManagement,
   metaIssuesEnabled,
   handleAddMetaIssue,
   handleGenerateReleaseNotes,
   progressSettings
 }) => {
+  const isReleased = item.status === 'Released';
+
   // CENTRALIZED hook instance - called ONCE per ReleaseVersionItem
   // This prevents state fragmentation between VersionItemHeader and PlannedIssuesList
-  const {
-    issueStatusMap,
-    issueTestStatusMap,
-    statusesLoaded,
-    setIssueStatus,
-    setTestStatus
-  } = useIssueStatuses(
+  const hookResult = useIssueStatuses(
     api,
-    item.plannedIssues || [],
-    manualIssueManagement,
+    // Released releases are fully frozen -> do not poll YouTrack / extension props
+    isReleased ? [] : (item.plannedIssues || []),
+    isReleased ? false : manualIssueManagement,
     STATUS_POLL_INTERVAL_MS
   );
+
+  // For Released releases we still want to *display* manual status/test status (read-only)
+  // using the stored snapshot, but we must not fetch/poll live status data.
+  const releasedSnapshotStatusMap = useMemo(() => {
+    const map: Record<string, IssueStatus> = {};
+    const snap = item.snapshot;
+    if (!snap || !Array.isArray(snap.issues)) {
+      return map;
+    }
+    snap.issues.forEach(s => {
+      if (!s || !s.id) { return; }
+      if (s.manualStatus) {
+        map[s.id] = s.manualStatus as IssueStatus;
+      }
+    });
+    return map;
+  }, [item.snapshot]);
+
+  const releasedSnapshotTestStatusMap = useMemo(() => {
+    const map: Record<string, TestStatus> = {};
+    const snap = item.snapshot;
+    if (!snap || !Array.isArray(snap.issues)) {
+      return map;
+    }
+    snap.issues.forEach(s => {
+      if (!s || !s.id) { return; }
+      if (s.manualTestStatus) {
+        map[s.id] = s.manualTestStatus as TestStatus;
+      }
+    });
+    return map;
+  }, [item.snapshot]);
+
+  const issueStatusMap = isReleased ? releasedSnapshotStatusMap : hookResult.issueStatusMap;
+  const issueTestStatusMap = isReleased ? releasedSnapshotTestStatusMap : hookResult.issueTestStatusMap;
+  const statusesLoaded = isReleased ? true : hookResult.statusesLoaded;
+  const setIssueStatus = isReleased ? (() => {}) : hookResult.setIssueStatus;
+  const setTestStatus = isReleased ? (() => {}) : hookResult.setTestStatus;
 
   // Memoize expensive computations
   const normalizedBaseUrl = useMemo(() => api.getBaseUrl(), []); // Base URL doesn't change
@@ -151,6 +189,7 @@ const ReleaseVersionItemComponent: React.FC<ReleaseVersionItemProps> = ({
         showProgressColumn={showProgressColumn}
         canEdit={canEdit}
         canDelete={canDelete}
+        isReleaseManager={isReleaseManager}
         manualIssueManagement={manualIssueManagement}
         metaIssuesEnabled={metaIssuesEnabled}
         handleAddMetaIssue={handleAddMetaIssue}
@@ -171,7 +210,8 @@ const ReleaseVersionItemComponent: React.FC<ReleaseVersionItemProps> = ({
         isReleaseDateExpired={isReleaseDateExpired}
         baseUrl={normalizedBaseUrl}
         manualIssueManagement={manualIssueManagement}
-        canManage={!!canEdit}
+        // When a release is marked as Released, freeze the state completely inside expandable section.
+        canManage={!!canEdit && item.status !== 'Released'}
         progressSettings={progressSettings}
         issueStatusMap={issueStatusMap}
         issueTestStatusMap={issueTestStatusMap}

@@ -12,6 +12,10 @@
  * @returns Unique ID string
  */
 export function generateClientId(prefix = ''): string {
+  const BASE36_RADIX = 36;
+  const RANDOM_START_INDEX = 2;
+  const RANDOM_END_INDEX = 15;
+
   // Use crypto.randomUUID if available (most modern browsers)
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     const uuid = crypto.randomUUID();
@@ -20,9 +24,9 @@ export function generateClientId(prefix = ''): string {
   
   // Fallback to timestamp + high-entropy random
   // Using base36 encoding for shorter, readable IDs
-  const timestamp = Date.now().toString(36);
-  const random1 = Math.random().toString(36).substring(2, 15);
-  const random2 = Math.random().toString(36).substring(2, 15);
+  const timestamp = Date.now().toString(BASE36_RADIX);
+  const random1 = Math.random().toString(BASE36_RADIX).substring(RANDOM_START_INDEX, RANDOM_END_INDEX);
+  const random2 = Math.random().toString(BASE36_RADIX).substring(RANDOM_START_INDEX, RANDOM_END_INDEX);
   const uniqueId = `${timestamp}-${random1}${random2}`;
   
   return prefix ? `${prefix}-${uniqueId}` : uniqueId;

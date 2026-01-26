@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const entities = require('@jetbrains/youtrack-scripting-api/entities');
 const api = require('./backend.js');
 const {message} = require("@jetbrains/youtrack-scripting-api/workflow.js");
@@ -63,6 +64,7 @@ exports.rule = entities.Issue.onChange({
         const field = ctx.issue.project.findFieldByName(fieldName);
         return ctx.issue.isChanged(field) && ctx.issue.isReported;
     },
+    // eslint-disable-next-line complexity
     action: (ctx) => {
         if (!isCustomFieldsMappingEnabled(ctx)) {
             return;

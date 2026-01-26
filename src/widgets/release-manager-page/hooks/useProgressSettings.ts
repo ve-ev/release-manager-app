@@ -1,6 +1,7 @@
 import {useState, useEffect, useRef} from 'react';
 import {API} from '../api';
 import {AppSettings} from '../interfaces';
+import {logger} from '../utils/logger';
 
 interface UseProgressSettingsReturn {
   progressSettings: AppSettings;
@@ -47,7 +48,7 @@ export function useProgressSettings(api: API): UseProgressSettingsReturn {
           return settings;
         })
         .catch((error: Error) => {
-          console.error('Failed to fetch progress settings:', error);
+          logger.error('Failed to fetch progress settings:', error);
           setIsLoading(false);
           throw error;
         })

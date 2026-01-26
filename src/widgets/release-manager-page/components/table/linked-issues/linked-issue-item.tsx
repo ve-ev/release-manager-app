@@ -4,7 +4,7 @@ import DropdownMenu from '@jetbrains/ring-ui-built/components/dropdown-menu/drop
 import type {ListDataItem} from '@jetbrains/ring-ui-built/components/list/list';
 import Tag from '@jetbrains/ring-ui-built/components/tag/tag';
 import {ProgressBar, ProgressDot, ProgressZone} from '../progress/progress-bar.tsx';
-import type {AppSettings} from '../../../interfaces';
+import type {AppSettings, FrozenZone} from '../../../interfaces';
 import {getZoneWithColor, getStatusColor, getTestStatusColor} from '../../../utils/progress-helpers';
 import type {IssueStatus, TestStatus} from '../../../hooks/useIssueStatuses';
 
@@ -39,6 +39,8 @@ export interface LinkedIssueItemProps {
   status: IssueStatus;
   testStatus: TestStatus;
   issueData?: SubtaskData;
+  /** When provided, render progress dot/bar from frozen snapshot rather than live field/subtask data. */
+  frozenZone?: FrozenZone;
   progressSettings: AppSettings;
   manualIssueManagement?: boolean;
   canManage?: boolean;
@@ -53,6 +55,7 @@ const LinkedIssueItemComponent: React.FC<LinkedIssueItemProps> = ({
   status,
   testStatus,
   issueData,
+  frozenZone,
   progressSettings: progressSettingsProp,
   manualIssueManagement: manualIssueManagementProp,
   canManage: canManageProp,
@@ -62,11 +65,56 @@ const LinkedIssueItemComponent: React.FC<LinkedIssueItemProps> = ({
 }) => {
   const isDiscoped = status === 'Discoped';
 
+  const frozenProgress = useMemo(() => {
+    if (!frozenZone) { return null; }
+    const mapZone = (z: FrozenZone): { zone: ProgressZone; color: string } => {
+      switch (z) {
+        case 'green':
+          return { zone: ProgressZone.GREEN, color: progressSettingsProp.greenColor || '#4CAF50' };
+        case 'yellow':
+          return { zone: ProgressZone.YELLOW, color: progressSettingsProp.yellowColor || '#FFC107' };
+        case 'red':
+          return { zone: ProgressZone.RED, color: progressSettingsProp.redColor || '#F44336' };
+        case 'grey':
+        default:
+          return { zone: ProgressZone.GREY, color: progressSettingsProp.greyColor || '#9E9E9E' };
+      }
+    };
+    const { zone, color } = mapZone(frozenZone);
+
+    // Meta issues: blueprint dot
+    const dot = issue.isMeta
+      ? <div className="progress-dot" style={{ backgroundColor: 'transparent', border: `2px solid ${color}` }}/>
+      : <ProgressDot zone={zone} customColor={color}/>;
+
+    // Frozen: no reliable subtask breakdown stored -> show single-segment bar
+    const bar = (
+      <ProgressBar
+        total={1}
+        green={zone === ProgressZone.GREEN ? 1 : 0}
+        yellow={zone === ProgressZone.YELLOW ? 1 : 0}
+        red={zone === ProgressZone.RED ? 1 : 0}
+        grey={zone === ProgressZone.GREY ? 1 : 0}
+        greenColor={progressSettingsProp.greenColor}
+        yellowColor={progressSettingsProp.yellowColor}
+        redColor={progressSettingsProp.redColor}
+        greyColor={progressSettingsProp.greyColor}
+      />
+    );
+
+    return (
+      <div className="progress-indicator">
+        {bar}
+        {dot}
+      </div>
+    );
+  }, [frozenZone, issue.isMeta, progressSettingsProp]);
+
   const renderSingleDotLocal = useMemo(() => {
     if (!issueData) {
       return null;
     }
-    
+
     // If parent field value is not available, derive status from subtasks according to rules
     const deriveFromSubtasks = (): { zone: ProgressZone; customColor: string } => {
       const values = (issueData.fieldValues || []).map(item => item.fieldValue);
@@ -112,6 +160,11 @@ const LinkedIssueItemComponent: React.FC<LinkedIssueItemProps> = ({
 
   const renderProgress = useMemo(() => {
     if (isDiscoped) { return null; }
+
+    // Frozen view: always use snapshot-derived progress indicator
+    if (frozenZone) {
+      return frozenProgress;
+    }
 
     if (!issueData) {
       // Placeholder to reserve space while loading
@@ -176,7 +229,7 @@ const LinkedIssueItemComponent: React.FC<LinkedIssueItemProps> = ({
         {dot}
       </div>
     );
-  }, [isDiscoped, issueData, renderSingleDotLocal, progressSettingsProp]);
+  }, [isDiscoped, issueData, renderSingleDotLocal, progressSettingsProp, frozenZone, frozenProgress]);
 
   const renderStatusControlsLocal = useMemo(() => {
     if (!manualIssueManagementProp) { return null; }
@@ -274,6 +327,7 @@ export const LinkedIssueItem = React.memo(LinkedIssueItemComponent, (prev, next)
   prev.issue.idReadable === next.issue.idReadable &&
   prev.issue.summary === next.issue.summary &&
   prev.issueData === next.issueData &&
+  prev.frozenZone === next.frozenZone &&
   prev.progressSettings === next.progressSettings
 ));
 

@@ -40,6 +40,7 @@ interface MetaIssueFormProps {
  * - Issue summary
  * - Related issues (reuses PlannedIssues component)
  */
+// eslint-disable-next-line complexity
 const MetaIssueForm: React.FC<MetaIssueFormProps> = ({
                                                          onSave,
                                                          onCancel,

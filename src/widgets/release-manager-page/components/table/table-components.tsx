@@ -2,6 +2,7 @@ import React, {memo} from 'react';
 import Loader from '@jetbrains/ring-ui-built/components/loader/loader';
 import '../../styles/version-table.css';
 /* eslint-disable complexity */
+/* eslint-disable react/prop-types */
 
 /** Sort types for table headers (product key used for tag column for backward compatibility) */
 export type SortKey = 'product' | 'version' | 'progress' | 'status' | 'releaseDate' | 'featureFreezeDate';
@@ -10,14 +11,21 @@ export type SortDirection = 'asc' | 'desc';
 /**
  * Table header component displaying column titles with sorting
  */
-export const TableHeader: React.FC<{
+export interface TableHeaderProps {
   showProductColumn?: boolean;
   showProgressColumn?: boolean;
   sortKey: SortKey;
   sortDirection: SortDirection;
   onSort: (key: SortKey) => void;
-// eslint-disable-next-line react/prop-types
-}> = memo(({ showProductColumn = true, showProgressColumn = true, sortKey, sortDirection, onSort }) => {
+}
+
+export const TableHeader: React.FC<TableHeaderProps> = memo(({
+  showProductColumn = true,
+  showProgressColumn = true,
+  sortKey,
+  sortDirection,
+  onSort
+}) => {
   const renderCol = (label: string, key?: SortKey, className = '') => {
     const isActive = Boolean(key && sortKey === key);
     let indicator = '';

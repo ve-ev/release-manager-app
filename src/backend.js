@@ -5,6 +5,8 @@
  * It includes utilities for managing release versions and HTTP endpoints for CRUD operations.
  */
 /* eslint-disable func-names */
+/* eslint-disable complexity */
+/* eslint-disable func-style */
 // YouTrack workflow entities API
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const entities = require('@jetbrains/youtrack-scripting-api/entities');
@@ -178,6 +180,372 @@ function getAppSettings(ctx) {
 }
 
 /**
+ * @param {Object} ctx
+ * @returns {boolean}
+ */
+function isReleaseManager(ctx) {
+    try {
+        const settings = ctx.settings || {};
+        if (!settings.releaseManagers) { return false; }
+        return settings.releaseManagers.find(function (rm) {
+            return ctx.currentUser && ctx.currentUser.isInGroup && ctx.currentUser.isInGroup(rm.name);
+        }) != null;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Reads issue status override map from project extension properties.
+ * Stored by Release Manager as: { issueStatuses: { [id]: status }, testStatuses: {...} }
+ * @param {Object} ctx
+ * @returns {{issueStatuses: Object, testStatuses: Object}}
+ */
+function getIssueStatusData(ctx) {
+    try {
+        const dataJson = (ctx.project && ctx.project.extensionProperties && ctx.project.extensionProperties.issueStatusData) || (ctx.settings && ctx.settings.issueStatusData);
+        const data = dataJson ? JSON.parse(dataJson) : {};
+        return {
+            issueStatuses: (data && data.issueStatuses && typeof data.issueStatuses === 'object') ? data.issueStatuses : {},
+            testStatuses: (data && data.testStatuses && typeof data.testStatuses === 'object') ? data.testStatuses : {}
+        };
+    } catch (e) {
+        logError('Failed to parse issue status data', e);
+        return { issueStatuses: {}, testStatuses: {} };
+    }
+}
+
+/**
+ * Resolves first matching issue field name from a list, case-insensitive.
+ * @param {Object} issue
+ * @param {string[]} candidates
+ * @returns {string|null}
+ */
+function resolveFieldNameCaseInsensitive(issue, candidates) {
+    if (!issue || !issue.fields || !Array.isArray(candidates) || candidates.length === 0) {
+        return null;
+    }
+    const lower = {};
+    try {
+        Object.keys(issue.fields).forEach(function (k) {
+            lower[k.toLowerCase()] = k;
+        });
+    } catch {
+        return null;
+    }
+    for (let i = 0; i < candidates.length; i++) {
+        const c = (candidates[i] || '').toString().trim();
+        if (!c) { continue; }
+        const actual = lower[c.toLowerCase()];
+        if (actual) { return actual; }
+    }
+    return null;
+}
+
+/**
+ * Maps a field value to zone based on app settings.
+ * @param {string|null} value
+ * @param {Object} settings
+ * @returns {'green'|'yellow'|'red'|'grey'}
+ */
+function getZoneForValueBackend(value, settings) {
+    if (value === null || value === undefined) { return 'grey'; }
+    // Frontend progress mapping is effectively case-insensitive (cached as lowercase),
+    // so snapshot mapping must do the same to preserve yellow/red states correctly.
+    const v = value.toString();
+    const vLower = v.toLowerCase();
+    const greens = Array.isArray(settings.greenZoneValues) ? settings.greenZoneValues : [];
+    const yellows = Array.isArray(settings.yellowZoneValues) ? settings.yellowZoneValues : [];
+    const reds = Array.isArray(settings.redZoneValues) ? settings.redZoneValues : [];
+    const toLowerArr = function (arr) {
+        const out = [];
+        for (let i = 0; i < arr.length; i++) {
+            const s = arr[i];
+            if (s === null || s === undefined) { continue; }
+            out.push(s.toString().toLowerCase());
+        }
+        return out;
+    };
+    const g = toLowerArr(greens);
+    const y = toLowerArr(yellows);
+    const r = toLowerArr(reds);
+
+    if (g.indexOf(vLower) !== -1) { return 'green'; }
+    if (y.indexOf(vLower) !== -1) { return 'yellow'; }
+    if (r.indexOf(vLower) !== -1) { return 'red'; }
+    return 'grey';
+}
+
+/**
+ * Computes zone for a regular issue at freeze time.
+ * Mirrors frontend logic: if parent field is null but subtasks have values,
+ * compute zone based on worst subtask (red > yellow > green) with all-green shortcut.
+ * Manual statuses override: Fixed/Merged => green; Discoped => excluded.
+ * @param {Object} issue
+ * @param {string|null} usedFieldName
+ * @param {Object} settings
+ * @param {'Unresolved'|'Fixed'|'Merged'|'Discoped'} manualStatus
+ * @returns {{zone: 'green'|'yellow'|'red'|'grey', fieldValue: (string|null)}}
+ */
+function computeIssueZoneAtFreeze(issue, usedFieldName, settings, manualStatus) {
+    if (manualStatus === 'Fixed' || manualStatus === 'Merged') {
+        return { zone: 'green', fieldValue: null };
+    }
+    if (manualStatus === 'Discoped') {
+        // Excluded from progress; keep zone grey for display.
+        return { zone: 'grey', fieldValue: null };
+    }
+    if (!issue) {
+        return { zone: 'grey', fieldValue: null };
+    }
+
+    const fieldName = usedFieldName;
+    if (!fieldName || !issue.fields || !issue.fields[fieldName]) {
+        return { zone: 'grey', fieldValue: null };
+    }
+
+    // Parent first
+    const parentField = issue.fields[fieldName];
+    const parentValue = parentField && (typeof parentField.name === 'string' ? parentField.name : null);
+    if (parentValue !== null && parentValue !== undefined) {
+        return { zone: getZoneForValueBackend(parentValue, settings), fieldValue: parentValue };
+    }
+
+    // If parent has no value, inspect subtasks
+    const subIds = [];
+    try {
+        issue.links['parent for'].forEach(function (subTask) {
+            subIds.push(subTask.id);
+        });
+    } catch {
+        // ignore
+    }
+
+    if (subIds.length === 0) {
+        return { zone: 'grey', fieldValue: null };
+    }
+
+    let hasRed = false;
+    let hasYellow = false;
+    let allGreen = true;
+    let hasGreen = false;
+
+    for (let i = 0; i < subIds.length; i++) {
+        const sub = entities.Issue.findById(subIds[i]);
+        if (!sub || !sub.fields || !sub.fields[fieldName]) {
+            allGreen = false;
+            continue;
+        }
+        const sf = sub.fields[fieldName];
+        const sv = sf && (typeof sf.name === 'string' ? sf.name : null);
+        const z = getZoneForValueBackend(sv, settings);
+        if (z === 'red') { hasRed = true; }
+        if (z === 'yellow') { hasYellow = true; }
+        if (z === 'green') { hasGreen = true; } else { allGreen = false; }
+    }
+
+    if (hasRed) { return { zone: 'red', fieldValue: null }; }
+    if (hasYellow) { return { zone: 'yellow', fieldValue: null }; }
+    if (allGreen && hasGreen) { return { zone: 'green', fieldValue: null }; }
+    return { zone: 'grey', fieldValue: null };
+}
+
+/**
+ * Captures frozen progress snapshot for a release.
+ * @param {Object} ctx
+ * @param {Object} release
+ * @param {string} freezeTimestamp
+ * @returns {Object} FrozenProgressSnapshot
+ */
+function captureFrozenSnapshot(ctx, release, freezeTimestamp) {
+    const settings = getAppSettings(ctx) || {};
+    const fieldNames = Array.isArray(settings.customFieldNames) ? settings.customFieldNames : [];
+    const statusData = getIssueStatusData(ctx);
+    const issueStatuses = statusData.issueStatuses || {};
+    const testStatuses = statusData.testStatuses || {};
+
+    const planned = Array.isArray(release.plannedIssues) ? release.plannedIssues : [];
+    const issues = [];
+    const excludedIssueIds = [];
+
+    const progress = { green: 0, yellow: 0, red: 0, grey: 0, total: 0 };
+
+    for (let i = 0; i < planned.length; i++) {
+        const ref = planned[i];
+        if (!ref || !ref.id) { continue; }
+
+        // Meta issue: compute based on related issues if present
+        const isMeta = !!ref.isMeta;
+        const related = Array.isArray(ref.metaRelatedIssueIds) ? ref.metaRelatedIssueIds : [];
+        if (isMeta && related.length > 0) {
+            let considered = 0;
+            let hasRed = false;
+            let hasYellow = false;
+            let allGreen = true;
+            let hasGreen = false;
+
+            for (let j = 0; j < related.length; j++) {
+                const relId = related[j];
+                if (!relId) { continue; }
+                const relManual = issueStatuses[relId] || 'Unresolved';
+                if (relManual === 'Discoped') {
+                    continue;
+                }
+
+                // Mirror frontend meta-issue logic:
+                // - consider manual Fixed/Merged as green
+                // - otherwise evaluate ONLY the parent field value (no subtask aggregation)
+                considered++;
+                if (relManual === 'Fixed' || relManual === 'Merged') {
+                    hasGreen = true;
+                    continue;
+                }
+
+                const relIssue = entities.Issue.findById(relId);
+                const usedField = resolveFieldNameCaseInsensitive(relIssue, fieldNames);
+                if (!relIssue || !usedField || !relIssue.fields || !relIssue.fields[usedField]) {
+                    allGreen = false;
+                    continue;
+                }
+                const parentField = relIssue.fields[usedField];
+                const parentValue = parentField && (typeof parentField.name === 'string' ? parentField.name : null);
+                const z = getZoneForValueBackend(parentValue, settings);
+                if (z === 'red') { hasRed = true; }
+                if (z === 'yellow') { hasYellow = true; }
+                if (z === 'green') { hasGreen = true; } else { allGreen = false; }
+            }
+
+            let zone = 'grey';
+            if (considered > 0) {
+                if (hasRed) { zone = 'red'; }
+                else if (hasYellow) { zone = 'yellow'; }
+                else if (allGreen && hasGreen) { zone = 'green'; }
+                else { zone = 'grey'; }
+            } else {
+                zone = 'grey';
+            }
+
+            issues.push({
+                id: ref.id,
+                idReadable: ref.idReadable,
+                summary: ref.summary || '',
+                isMeta: true,
+                metaRelatedIssueIds: related,
+                zone: zone,
+                fieldName: null,
+                fieldValue: null,
+                parentFieldValue: null,
+                subtaskFieldValues: related.map(function (rid) {
+                    const relIssue = entities.Issue.findById(rid);
+                    // For meta issues, snapshot what UI uses: related issue parent field value only
+                    const usedField = resolveFieldNameCaseInsensitive(relIssue, fieldNames);
+                    let parentValue = null;
+                    try {
+                        if (relIssue && usedField && relIssue.fields && relIssue.fields[usedField]) {
+                            const pf = relIssue.fields[usedField];
+                            parentValue = pf && (typeof pf.name === 'string' ? pf.name : null);
+                        }
+                    } catch {
+                        parentValue = null;
+                    }
+                    return { id: rid, idReadable: relIssue ? relIssue.idReadable : undefined, fieldValue: parentValue };
+                })
+            });
+
+            // Meta issue counts as one planned item in progress.
+            progress[zone] += 1;
+            progress.total += 1;
+
+            continue;
+        }
+
+        const manualStatus = issueStatuses[ref.id] || 'Unresolved';
+        const manualTestStatus = testStatuses[ref.id];
+        if (manualStatus === 'Discoped') {
+            excludedIssueIds.push(ref.id);
+        }
+
+        const issue = entities.Issue.findById(ref.id);
+        const usedField = resolveFieldNameCaseInsensitive(issue, fieldNames);
+        const computed = computeIssueZoneAtFreeze(issue, usedField, settings, manualStatus);
+        const zone = computed.zone;
+
+        let readable = ref.idReadable;
+        let summary = ref.summary || '';
+        try {
+            if (issue) {
+                readable = readable || issue.idReadable;
+                summary = summary || issue.summary;
+            }
+        } catch {
+            // ignore
+        }
+
+        issues.push({
+            id: ref.id,
+            idReadable: readable,
+            summary: summary,
+            isMeta: false,
+            manualStatus: manualStatus,
+            manualTestStatus: manualTestStatus,
+            zone: zone,
+            fieldName: usedField,
+            fieldValue: computed.fieldValue,
+            parentFieldValue: (function () {
+                try {
+                    if (issue && usedField && issue.fields && issue.fields[usedField]) {
+                        const pf = issue.fields[usedField];
+                        return pf && (typeof pf.name === 'string' ? pf.name : null);
+                    }
+                } catch {
+                    // ignore
+                }
+                return null;
+            })(),
+            subtaskFieldValues: (function () {
+                const out = [];
+                if (!issue || !usedField) { return out; }
+                const subIds = [];
+                try {
+                    issue.links['parent for'].forEach(function (subTask) {
+                        subIds.push(subTask.id);
+                    });
+                } catch {
+                    // ignore
+                }
+                for (let si = 0; si < subIds.length; si++) {
+                    const sub = entities.Issue.findById(subIds[si]);
+                    let v = null;
+                    try {
+                        if (sub && sub.fields && sub.fields[usedField]) {
+                            const sf = sub.fields[usedField];
+                            v = sf && (typeof sf.name === 'string' ? sf.name : null);
+                        }
+                    } catch {
+                        v = null;
+                    }
+                    out.push({ id: subIds[si], idReadable: sub ? sub.idReadable : undefined, fieldValue: v });
+                }
+                return out;
+            })()
+        });
+
+        if (manualStatus !== 'Discoped') {
+            progress[zone] += 1;
+            progress.total += 1;
+        }
+    }
+
+    return {
+        capturedAt: new Date().toISOString(),
+        freezeTimestamp: freezeTimestamp,
+        issues: issues,
+        excludedIssueIds: excludedIssueIds,
+        progress: progress
+    };
+}
+
+/**
  * Finds a release by its display version value
  * @param {Object} ctx
  * @param {string} version
@@ -195,7 +563,6 @@ function findReleaseByVersion(ctx, version) {
  * @param {string} issueId
  * @param {string} [issueSummary]
  */
-// eslint-disable-next-line complexity
 function addIssueToRelease(ctx, releaseId, issueId, issueSummary) {
     if (!releaseId || !issueId) { return; }
     const releaseVersions = getReleaseVersions(ctx);
@@ -248,7 +615,6 @@ function removeIssueFromOtherReleases(ctx, issueId, exceptReleaseId) {
  * @param {Object} updatedReleaseVersion
  * @returns {Object|null} updated object or null if not found/failed
  */
-// eslint-disable-next-line complexity
 function updateReleaseById(ctx, id, updatedReleaseVersion) {
     // Validate release version
     const validationErrors = validateReleaseVersion(updatedReleaseVersion);
@@ -264,7 +630,121 @@ function updateReleaseById(ctx, id, updatedReleaseVersion) {
     const prev = releaseVersions[index];
     const prevIds = (prev.linkedIssues || []).map(function(x){ return x && x.id; }).filter(Boolean);
 
-    updatedReleaseVersion.id = id; // preserve id
+    const by = (ctx.currentUser && (ctx.currentUser.login || ctx.currentUser.name)) || undefined;
+    const now = new Date().toISOString();
+    const auditEvents = Array.isArray(prev.auditEvents) ? prev.auditEvents.slice() : [];
+
+    const prevFreezeConfirmed = !!prev.freezeConfirmed;
+    const freezeConfirmRequestedNow = !!updatedReleaseVersion.freezeConfirmed && !prevFreezeConfirmed;
+    const unfreezeRequested = prevFreezeConfirmed && updatedReleaseVersion.freezeConfirmed === false;
+
+    const releasedNow = (updatedReleaseVersion.status === 'Released') && (prev.status !== 'Released');
+    const unreleaseNow = (prev.status === 'Released') && (updatedReleaseVersion.status !== 'Released');
+
+    const manager = isReleaseManager(ctx);
+
+    // Enforce manager-only actions
+    if ((freezeConfirmRequestedNow || unfreezeRequested || releasedNow || unreleaseNow) && !manager) {
+        sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can perform this action');
+        return null;
+    }
+
+    if (unfreezeRequested && prev.status === 'Released') {
+        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Release is Released: unfreeze is not allowed');
+        return null;
+    }
+
+    // Audit: log any status transition
+    if (updatedReleaseVersion.status !== prev.status) {
+        auditEvents.push({
+            type: 'STATUS_CHANGED',
+            at: now,
+            by: by,
+            fromStatus: prev.status,
+            toStatus: updatedReleaseVersion.status
+        });
+    }
+
+    // Full lock while Released (no mutations allowed until status changes)
+    if (prev.status === 'Released' && updatedReleaseVersion.status === 'Released') {
+        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Release is Released: it cannot be modified');
+        return null;
+    }
+
+    // Apply unrelease: leaving Released unlocks, so clear progress-freeze snapshot
+    if (unreleaseNow) {
+        updatedReleaseVersion.freezeTimestamp = undefined;
+        updatedReleaseVersion.snapshot = undefined;
+        // Keep freezeConfirmed as-is (release may return to “freeze confirmed” state)
+    }
+
+    // Apply feature freeze confirmation (locks issue membership but does NOT freeze progress)
+    if (freezeConfirmRequestedNow) {
+        updatedReleaseVersion.freezeConfirmed = true;
+        auditEvents.push({ type: 'FREEZE_CONFIRMED', at: now, by: by });
+    }
+
+    // Apply unfreeze (explicit action): unlock issue membership
+    if (unfreezeRequested) {
+        updatedReleaseVersion.freezeConfirmed = false;
+        updatedReleaseVersion.freezeTimestamp = undefined;
+        updatedReleaseVersion.snapshot = undefined;
+        auditEvents.push({ type: 'UNFROZEN', at: now, by: by });
+    }
+
+    // Enforce membership immutability after feature freeze confirmation
+    if (prevFreezeConfirmed && !unfreezeRequested && prev.status !== 'Released') {
+        const prevPlannedIds = (prev.plannedIssues || []).map(function (x) { return x && x.id; }).filter(Boolean);
+        const currPlannedIds = (updatedReleaseVersion.plannedIssues || []).map(function (x) { return x && x.id; }).filter(Boolean);
+        const prevLinkedIds = (prev.linkedIssues || []).map(function (x) { return x && x.id; }).filter(Boolean);
+        const currLinkedIds = (updatedReleaseVersion.linkedIssues || []).map(function (x) { return x && x.id; }).filter(Boolean);
+
+        const sameArray = function (a, b) {
+            if (a.length !== b.length) { return false; }
+            for (let i = 0; i < a.length; i++) {
+                if (a[i] !== b[i]) { return false; }
+            }
+            return true;
+        };
+
+        // Order matters in UI; treat different order as mutation.
+        const plannedChanged = !sameArray(prevPlannedIds, currPlannedIds);
+        const linkedChanged = !sameArray(prevLinkedIds, currLinkedIds);
+        const metaChanged = JSON.stringify(prev.metaIssues || []) !== JSON.stringify(updatedReleaseVersion.metaIssues || []);
+
+        if (plannedChanged || linkedChanged || metaChanged) {
+            sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Release is frozen: issues list cannot be changed after freeze');
+            return null;
+        }
+
+        // Force keeping membership fields
+        updatedReleaseVersion.plannedIssues = prev.plannedIssues;
+        updatedReleaseVersion.linkedIssues = prev.linkedIssues;
+        updatedReleaseVersion.metaIssues = prev.metaIssues;
+        updatedReleaseVersion.freezeConfirmed = true;
+    }
+
+    // Progress freeze happens only when moving to Released
+    if (releasedNow) {
+        updatedReleaseVersion.freezeTimestamp = now;
+        updatedReleaseVersion.freezeConfirmed = true;
+
+        try {
+            updatedReleaseVersion.snapshot = captureFrozenSnapshot(ctx, updatedReleaseVersion, now);
+        } catch (e) {
+            logError('Failed to capture frozen snapshot', e);
+            sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Failed to release: could not capture progress snapshot');
+            return null;
+        }
+
+        auditEvents.push({ type: 'RELEASED_LOCKED', at: now, by: by });
+    }
+
+    // Always persist audit events
+    updatedReleaseVersion.auditEvents = auditEvents;
+
+    // Preserve id
+    updatedReleaseVersion.id = id;
     releaseVersions[index] = updatedReleaseVersion;
 
     if (!saveReleaseVersions(ctx, releaseVersions)) { return null; }
@@ -450,7 +930,6 @@ exports.httpHandler = {
             method: 'GET',
             path: 'app-settings',
             scope: 'project',
-            // eslint-disable-next-line complexity
             handle: function handle(ctx) {
                 try {
                     // Return the progress settings (renamed endpoint)
@@ -691,7 +1170,6 @@ exports.httpHandler = {
             method: 'GET',
             path: 'issue-statuses',
             scope: 'project',
-            // eslint-disable-next-line complexity
             handle: function handle(ctx) {
                 try {
                     // Try project-scoped storage first
@@ -719,7 +1197,6 @@ exports.httpHandler = {
             method: 'PUT',
             path: 'issue-status',
             scope: 'project',
-            // eslint-disable-next-line complexity
             handle: function handle(ctx) {
                 try {
                     const body = ctx.request.json();
@@ -760,7 +1237,6 @@ exports.httpHandler = {
             method: 'PUT',
             path: 'issue-test-status',
             scope: 'project',
-            // eslint-disable-next-line complexity
             handle: function handle(ctx) {
                 try {
                     const body = ctx.request.json();
@@ -813,7 +1289,6 @@ exports.httpHandler = {
             method: 'PUT',
             path: 'expanded-version',
             scope: 'project',
-            // eslint-disable-next-line complexity
             handle: function handle(ctx) {
                 try {
                     const body = ctx.request.json();

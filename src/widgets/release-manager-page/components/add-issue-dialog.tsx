@@ -23,6 +23,7 @@ interface AddIssueDialogProps {
   metaIssuesEnabled?: boolean;
 }
 
+// eslint-disable-next-line complexity
 const AddIssueDialog: React.FC<AddIssueDialogProps> = ({
   open,
   item,

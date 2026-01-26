@@ -33,6 +33,7 @@ interface ReleaseTableProps {
   /** Permissions */
   canEdit?: boolean;
   canDelete?: boolean;
+  isReleaseManager?: boolean;
   /** Manual issue management flag */
   manualIssueManagement?: boolean;
   /** Feature flag for meta issues */
@@ -62,6 +63,7 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
   host,
   canEdit,
   canDelete,
+  isReleaseManager,
   manualIssueManagement,
   metaIssuesEnabled,
   handleAddMetaIssue,
@@ -196,6 +198,7 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
         host={host}
         canEdit={canEdit}
         canDelete={canDelete}
+        isReleaseManager={isReleaseManager}
         manualIssueManagement={manualIssueManagement}
         metaIssuesEnabled={metaIssuesEnabled}
         handleAddMetaIssue={handleAddMetaIssue}
@@ -222,6 +225,7 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
     host,
     canEdit,
     canDelete,
+    isReleaseManager,
     manualIssueManagement,
     metaIssuesEnabled,
     handleAddMetaIssue,

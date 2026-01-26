@@ -35,6 +35,7 @@ export function getZoneForValue(
  * Get zone with custom color based on settings
  * OPTIMIZED: Uses cached normalized zone values
  */
+// eslint-disable-next-line complexity
 export function getZoneWithColor(
   fieldValue: string | null,
   settings: AppSettings
