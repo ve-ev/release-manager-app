@@ -96,6 +96,10 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
   const isReleased = item.status === 'Released';
   const isFreezeConfirmed = !!item.freezeConfirmed;
 
+  // Only release managers and light managers should see the Actions dropdown at all.
+  // `canEdit` is granted to both full and light managers by `usePermissions`.
+  const canSeeActions = !!canEdit || !!isReleaseManager;
+
   // Lifecycle rules:
   // - No freeze: all editable
   // - Freeze confirmed: cannot add/remove issues, but progress is live and manual mgmt is available
@@ -280,6 +284,10 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
 
   // Memoize actions dropdown menu items
   const actionsMenuItems = useMemo(() => {
+    if (!canSeeActions) {
+      return [] as readonly ListDataItem<unknown>[];
+    }
+
     const items: Array<ListDataItem<unknown>> = [];
 
     if (canEditRelease) {
@@ -315,7 +323,7 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
     }
 
     return items;
-  }, [canEditRelease, canAddIssues, canDelete, showConfirmFreeze, createMenuItem, handleEditClick, handleAddMetaIssueClick, handleConfirmFreeze, handleGenerateNotesClick, handleDeleteClick, handleViewAuditEvents, item.freezeConfirmed, item.status, isReleaseManager, handleUnfreeze]);
+  }, [canSeeActions, canEditRelease, canAddIssues, canDelete, showConfirmFreeze, createMenuItem, handleEditClick, handleAddMetaIssueClick, handleConfirmFreeze, handleGenerateNotesClick, handleDeleteClick, handleViewAuditEvents, item.freezeConfirmed, item.status, isReleaseManager, handleUnfreeze]);
 
   // Memoize status tag element
   const statusTagElement = useMemo(() => (
@@ -367,7 +375,15 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
   }, [item.plannedIssues, item.freezeTimestamp, item.snapshot, mainAvailable, mainProgress, effectiveProgressSettings]);
 
   return (
-    <div className="version-list-row">
+    <div
+      className={[
+        'version-list-row',
+        'version-list-grid',
+        showProductColumn ? null : 'no-product',
+        showProgressColumn ? null : 'no-progress',
+        canSeeActions ? null : 'no-actions'
+      ].filter(Boolean).join(' ')}
+    >
       <div className="version-list-cell expand-cell">
         <Expander
           closed={isClosed}
@@ -401,33 +417,37 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
           ) : statusTagElement
         )}
       </div>
-      <div className="version-list-cell date-cell">
-        <span className={releaseDateClassName}>
-          {formatDate(item.releaseDate)}
-        </span>
-      </div>
-      <div className="version-list-cell date-cell">
+      <div className="version-list-cell date-cell feature-freeze-cell">
         <span className={featureFreezeDateClassName}>
           {formatDate(item.featureFreezeDate)}
         </span>
       </div>
-      <div className="version-list-cell actions-cell">
-        <div className="actions">
-          <DropdownMenu<unknown>
-            menuProps={menuProps}
-            anchor={(
-              <Button
-                title="Actions"
-                data-test="actions-button"
-              >
-                Actions
-              </Button>
-            )}
-            data={actionsMenuItems}
-            onSelect={handleMenuSelect}
-          />
-        </div>
+      <div className="version-list-cell date-cell release-date-cell">
+        <span className={releaseDateClassName}>
+          {formatDate(item.releaseDate)}
+        </span>
       </div>
+      {canSeeActions ? (
+        <div className="version-list-cell actions-cell">
+          <div className="actions">
+            {actionsMenuItems.length > 0 ? (
+              <DropdownMenu<unknown>
+                menuProps={menuProps}
+                anchor={(
+                  <Button
+                    title="Actions"
+                    data-test="actions-button"
+                  >
+                    Actions
+                  </Button>
+                )}
+                data={actionsMenuItems}
+                onSelect={handleMenuSelect}
+              />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

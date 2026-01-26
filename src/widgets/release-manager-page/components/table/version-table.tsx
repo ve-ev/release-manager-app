@@ -71,6 +71,8 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
   settings,
   progressSettings
 }) => {
+  const canSeeActions = !!canEdit || !!isReleaseManager;
+
   /** Set of IDs for release versions with expanded info sections */
   const [expandedInfoSections, setExpandedInfoSections] = useState<Set<string | number>>(new Set());
 
@@ -280,6 +282,7 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
       <TableHeader
         showProductColumn={showProductColumn}
         showProgressColumn={showProgressColumn}
+        showActionsColumn={canSeeActions}
         sortKey={sortKey}
         sortDirection={sortDirection}
         onSort={handleSort}

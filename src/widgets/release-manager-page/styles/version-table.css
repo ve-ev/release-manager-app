@@ -2,27 +2,108 @@
   display: flex;
   flex-direction: column;
   width: 100%;
+  /*
+    Provide table sizing variables to non-grid descendants too
+    (e.g. `.version-list-item::after` separators and expandable sections).
+  */
+  --col-expand: calc(var(--ring-unit) * 3);
+
+  /*
+    Single source of truth for the visual table insets.
+    Anything that draws an inset separator should use these.
+  */
+  --table-inset-left: var(--ring-unit);
+  --table-inset-right: calc(var(--ring-unit) + var(--col-expand));
 }
 
 .version-list-header {
-  display: flex;
+  display: grid;
   padding: calc(var(--ring-unit) * 1.5) var(--ring-unit);
   font-weight: 500;
-  border-bottom: 1px solid var(--ring-line-color);
+  border-bottom: none;
   background-color: var(--ring-content-background-color);
   align-items: center;
   min-height: calc(var(--ring-unit) * 3);
   width: 100%;
+  box-sizing: border-box;
   position: sticky;
   top: 0;
   z-index: 1;
+}
+
+/* Separator between header and rows should respect the same right padding as the grid */
+.version-list-header::after {
+  content: '';
+  position: absolute;
+  left: var(--table-inset-left);
+  right: var(--table-inset-right);
+  bottom: 0;
+  height: 1px;
+  background-color: var(--ring-line-color);
+}
+
+/* Add a small right-side breathing room equal to the expand column width */
+.version-list-header.version-list-grid {
+  padding-right: calc(var(--ring-unit) + var(--col-expand));
+}
+
+/*
+  Shared column layout for header and rows.
+  Uses CSS grid + fixed column indices to keep header/cells aligned even when
+  optional columns are conditionally rendered.
+*/
+.version-list-grid {
+  /* Use conservative minimums to keep the grid flexible on resize */
+  --col-product: minmax(120px, 1fr);
+  --col-version: minmax(140px, 2fr);
+  --col-progress: minmax(160px, 2fr);
+  /* Status tends to be visually compact; allow it to grow/shrink with available space */
+  --col-status: minmax(120px, 1fr);
+  --col-date: minmax(120px, 1fr);
+  /* Allow Actions to shrink a bit on narrow widths while staying usable */
+  --col-actions: minmax(calc(var(--ring-unit) * 8), calc(var(--ring-unit) * 10));
+
+  grid-template-columns:
+    var(--col-expand)
+    var(--col-product)
+    var(--col-version)
+    var(--col-progress)
+    var(--col-status)
+    var(--col-date)
+    var(--col-date)
+    var(--col-actions);
+}
+
+.version-list-grid.no-product {
+  --col-product: 0px;
+}
+
+.version-list-grid.no-progress {
+  --col-progress: 0px;
+}
+
+.version-list-grid.no-actions {
+  --col-actions: 0px;
 }
 
 .version-list-header-cell {
   padding: 0 var(--ring-unit);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  /* Make the whole header cell (not just the text) the hit target */
+  align-self: stretch;
+}
+
+.version-list-header-cell.actions-header-hidden {
+  /* Keep the grid column, but hide the header content visually */
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .version-list {
@@ -32,52 +113,101 @@
 }
 
 .version-list-item {
-  border-bottom: 1px solid var(--ring-line-color);
+  border-bottom: none;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Row separator should respect the same right padding/gap as the table grid */
+.version-list-item::after {
+  content: '';
+  position: absolute;
+  left: var(--table-inset-left);
+  right: var(--table-inset-right);
+  bottom: 0;
+  height: 1px;
+  background-color: var(--ring-line-color);
 }
 
 .version-list-row {
-  display: flex;
+  display: grid;
   padding: calc(var(--ring-unit) * 2) var(--ring-unit);
   align-items: center;
-  min-height: calc(var(--ring-unit) * 7);
+  min-height: calc(var(--ring-unit) * 8);
+  /* Match header sizing: ensure rows always span the full container width */
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/*
+  Match header/separator right inset (includes the extra breathing room equal to `--col-expand`).
+  This keeps Actions buttons inside the same visual table width as header and separators.
+*/
+.version-list-row.version-list-grid {
+  padding-right: calc(var(--ring-unit) + var(--col-expand));
 }
 
 .version-list-cell {
   padding: 0 var(--ring-unit);
   display: flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Status tag can render small indicators outside its box; don't clip them */
+.version-list-cell.status-cell {
+  overflow: visible;
 }
 
 .expand-cell {
-  width: calc(var(--ring-unit) * 3);
-  flex-shrink: 0;
+  grid-column: 1;
+}
+
+/* Fixed grid column indices (prevents shifting when optional columns are removed) */
+.product-cell {
+  grid-column: 2;
 }
 
 .version-cell {
-  flex: 2;
+  grid-column: 3;
 }
 
-.date-cell {
-  flex: 1;
-  display: flex;
-  justify-content: flex-start;
-}
-
-.product-cell {
-  flex: 1;
-  display: flex;
-  align-items: center;
+.progress-cell {
+  grid-column: 4;
 }
 
 .status-cell {
-  flex: 1;
-  display: flex;
-  align-items: center;
+  grid-column: 5;
+  white-space: nowrap;
+}
+
+.date-cell {
+  white-space: nowrap;
+}
+
+.feature-freeze-cell {
+  grid-column: 6;
+}
+
+.release-date-cell {
+  grid-column: 7;
 }
 
 .actions-cell {
-  width: calc(var(--ring-unit) * 10);
-  flex-shrink: 0;
+  grid-column: 8;
+}
+
+.header-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .loader-container {
@@ -170,7 +300,7 @@
   margin-right: var(--ring-unit);
 }
 
-.version-cell {
+.version-list-cell.version-cell {
   display: flex;
   flex-direction: row;
   position: relative;
@@ -186,10 +316,11 @@
 }
 
 .linked-issues-list {
-  margin: 0 calc(var(--ring-unit) * 5);
+  /* Keep internal separators aligned with the row/table inset width model */
+  margin: 0;
   border-radius: 0;
   padding: calc(var(--ring-unit) * 1) 0;
-  width: calc(100% - var(--ring-unit) * 10);
+  width: 100%;
   box-sizing: border-box;
   max-width: 100%;
   display: flex;
@@ -201,10 +332,13 @@
 
 .linked-issues-list::before {
   content: '';
-  display: block;
+  position: absolute;
+  top: 0;
+  left: 10px;
+  right: 10px;
   height: 1px;
   background-color: var(--ring-line-color);
-  width: 100%;
+  pointer-events: none;
 }
 
 .linked-issue-item {
@@ -281,13 +415,34 @@
   margin: 0;
   border-radius: 0;
   width: 100%;
+  align-self: stretch;
+  /* Match the full width of `.version-list-row.version-list-grid` */
+  padding-left: var(--ring-unit);
+  padding-right: calc(var(--ring-unit) + var(--col-expand));
   box-sizing: border-box;
-  max-width: 100%;
-  display: flex;
+  display: grid;
   flex-direction: column;
   position: relative;
   overflow: hidden;
+  /*
+    Prevent background from being painted in the left/right padding area.
+    The background is clipped to the content box so the table inset padding
+    stays visually "empty" (same as the surrounding container).
+  */
   background-color: var(--ring-sidebar-background-color);
+  background-clip: content-box;
+}
+
+/* Separator between row header and expanded content should match row inset width */
+.expandable-content-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--table-inset-left);
+  right: var(--table-inset-right);
+  height: 1px;
+  background-color: var(--ring-line-color);
+  pointer-events: none;
 }
 
 /* Styles for the version info section - styled like banner component */
@@ -473,6 +628,37 @@
 .version-list-header-cell.sortable {
   cursor: pointer;
   border-radius: var(--ring-border-radius);
+  /*
+    Keep header labels centered relative to their columns.
+    Sort indicators must not shift the label off-center.
+    Also avoid extra header-only padding which can visually shift columns.
+  */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 var(--ring-unit);
+}
+
+.version-list-header-cell.sortable .header-label {
+  grid-column: 2;
+  justify-self: center;
+}
+
+.version-list-header-cell.sortable .sort-indicator {
+  grid-column: 3;
+  justify-self: end;
+}
+
+.version-list-header-cell .header-label {
+  line-height: 2;
+  padding-top: 1px;
+  padding-bottom: 1px;
+  white-space: nowrap;
+}
+
+.version-list-header-cell .sort-indicator {
+  font-size: 14px;
+  line-height: 1;
 }
 
 .version-list-header-cell.sortable:hover {
@@ -503,7 +689,7 @@
   overflow: hidden;
   align-items: flex-start;
   gap: var(--ring-unit);
-  
+
   /* Warning styling */
   border: 1px solid var(--ring-orange-border);
   background-color: var(--ring-warning-container-light);
@@ -525,7 +711,7 @@
   overflow: hidden;
   align-items: flex-start;
   gap: var(--ring-unit);
-  
+
   /* Info styling - blue theme */
   border: 1px solid var(--ring-border-hover-color);
   color: var(--ring-text-color);
