@@ -19,6 +19,7 @@ interface UseReleaseVersionsOptions {
  * Detect whether release memberships (planned or linked issues) have changed
  * between two snapshots of release versions.
  */
+// eslint-disable-next-line complexity
 function hasMembershipChanges(prev: ReleaseVersion[], next: ReleaseVersion[]): boolean {
   if (!Array.isArray(prev) || !Array.isArray(next)) {
     return false;
@@ -139,15 +140,26 @@ export function useReleaseVersions(api: API, options?: UseReleaseVersionsOptions
 
     // Targeted status update handler
     const targetedHandler = ((e: Event) => {
-      const ce = e as CustomEvent<{ id: string | number; status: ReleaseStatus; freezeConfirmed?: boolean }>;
+      const ce = e as CustomEvent<{
+        id: string | number;
+        status: ReleaseStatus;
+        freezeConfirmed?: boolean;
+        freezeTimestamp?: string | null;
+        snapshot?: ReleaseVersion['snapshot'] | null;
+        auditEvents?: ReleaseVersion['auditEvents'] | null;
+      }>;
       const detail = ce?.detail;
       if (!detail) { return; }
+      // eslint-disable-next-line complexity
       setReleaseVersions(prev => prev.map(rv =>
         (rv.id === detail.id ? {
           ...rv,
           status: detail.status,
           // Update freezeConfirmed if it's included in the event
-          ...(detail.freezeConfirmed !== undefined ? { freezeConfirmed: detail.freezeConfirmed } : {})
+          ...(detail.freezeConfirmed !== undefined ? { freezeConfirmed: detail.freezeConfirmed } : {}),
+          ...(('freezeTimestamp' in detail) ? { freezeTimestamp: detail.freezeTimestamp || undefined } : {}),
+          ...(('snapshot' in detail) ? { snapshot: detail.snapshot || undefined } : {}),
+          ...(('auditEvents' in detail) ? { auditEvents: detail.auditEvents || undefined } : {})
         } : rv)
       ));
     }) as EventListener;

@@ -51,6 +51,7 @@ const styles = {
 
 // All form field components have been moved to separate files in the components directory
 
+// eslint-disable-next-line complexity
 const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, onSave, onCancel, metaIssuesEnabled, initialShowMetaIssueForm}) => {
   // Initialize form state
   const [formData, setFormData] = useState<ReleaseVersion>({
@@ -103,7 +104,7 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
 
     // Clear any search errors when form is reset or new release version is loaded
     setSearchError(undefined);
-  }, [releaseVersion]);
+  }, [releaseVersion, setSearchError]);
 
   // Clean up debounce timeout when component unmounts
   useEffect(() => {
@@ -178,6 +179,7 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
 
 
   // Handle saving meta issue data
+  // eslint-disable-next-line complexity
   const handleMetaIssueSave = useCallback(async (meta: MetaIssueData) => {
     // Prepare updated planned issues array
     let updatedPlannedIssues: PlannedOrMetaIssue[] = [];

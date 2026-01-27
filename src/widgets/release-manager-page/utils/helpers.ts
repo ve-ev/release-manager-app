@@ -184,6 +184,7 @@ export function reconcileReleaseVersions(
   next: ReleaseVersion[]
 ): ReleaseVersion[] {
   const prevById = new Map(prev.map(it => [it.id, it] as const));
+  // eslint-disable-next-line complexity
   return next.map(n => {
     const p = prevById.get(n.id);
     if (!p) {

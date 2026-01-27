@@ -2,6 +2,7 @@ import React, {memo} from 'react';
 import Loader from '@jetbrains/ring-ui-built/components/loader/loader';
 import '../../styles/version-table.css';
 /* eslint-disable complexity */
+/* eslint-disable react/prop-types */
 
 /** Sort types for table headers (product key used for tag column for backward compatibility) */
 export type SortKey = 'product' | 'version' | 'progress' | 'status' | 'releaseDate' | 'featureFreezeDate';
@@ -10,14 +11,23 @@ export type SortDirection = 'asc' | 'desc';
 /**
  * Table header component displaying column titles with sorting
  */
-export const TableHeader: React.FC<{
+export interface TableHeaderProps {
   showProductColumn?: boolean;
   showProgressColumn?: boolean;
+  showActionsColumn?: boolean;
   sortKey: SortKey;
   sortDirection: SortDirection;
   onSort: (key: SortKey) => void;
-// eslint-disable-next-line react/prop-types
-}> = memo(({ showProductColumn = true, showProgressColumn = true, sortKey, sortDirection, onSort }) => {
+}
+
+export const TableHeader: React.FC<TableHeaderProps> = memo(({
+  showProductColumn = true,
+  showProgressColumn = true,
+  showActionsColumn = true,
+  sortKey,
+  sortDirection,
+  onSort
+}) => {
   const renderCol = (label: string, key?: SortKey, className = '') => {
     const isActive = Boolean(key && sortKey === key);
     let indicator = '';
@@ -46,21 +56,37 @@ export const TableHeader: React.FC<{
         tabIndex={key ? 0 : undefined}
         title={key ? `Sort by ${label}` : undefined}
       >
-        {label}{indicator}
+        <span className="header-label">{label}</span>
+        {indicator ? <span className="sort-indicator" aria-hidden>{indicator}</span> : null}
       </div>
     );
   };
 
+  const renderHiddenCol = (label: string, className = '') => (
+    <div
+      className={`version-list-header-cell ${className} actions-header-hidden`.trim()}
+      aria-label={label}
+    />
+  );
+
   return (
-    <div className="version-list-header">
+    <div
+      className={[
+        'version-list-header',
+        'version-list-grid',
+        showProductColumn ? null : 'no-product',
+        showProgressColumn ? null : 'no-progress',
+        showActionsColumn ? null : 'no-actions'
+      ].filter(Boolean).join(' ')}
+    >
       <div className="version-list-header-cell expand-cell"/>
       {showProductColumn ? renderCol('Tag', 'product', 'product-cell') : null}
       {renderCol('Version', 'version', 'version-cell')}
       {showProgressColumn ? renderCol('Progress', 'progress', 'progress-cell') : null}
       {renderCol('Status', 'status', 'status-cell')}
-      {renderCol('Release Date', 'releaseDate', 'date-cell')}
-      {renderCol('Feature Freeze Date', 'featureFreezeDate', 'date-cell')}
-      <div className="version-list-header-cell actions-cell"/>
+      {renderCol('Freeze Date', 'featureFreezeDate', 'date-cell feature-freeze-cell')}
+      {renderCol('Release Date', 'releaseDate', 'date-cell release-date-cell')}
+      {showActionsColumn ? renderHiddenCol('Actions', 'actions-cell') : null}
     </div>
   );
 });

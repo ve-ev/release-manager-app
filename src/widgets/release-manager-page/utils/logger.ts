@@ -5,8 +5,9 @@
  * In production: logs errors only (could be extended to send to error reporting service)
  */
 
+const consoleApi = globalThis.console;
 // Simple development detection - if console.assert exists and isn't a noop, we're in dev mode
-const isDevelopment = typeof console.assert === 'function';
+const isDevelopment = typeof consoleApi?.assert === 'function';
 
 export const logger = {
   /**
@@ -14,7 +15,7 @@ export const logger = {
    */
   log: (...args: unknown[]): void => {
     if (isDevelopment) {
-      console.log(...args);
+      consoleApi?.log?.(...args);
     }
   },
 
@@ -23,7 +24,7 @@ export const logger = {
    * In production, this could be extended to send to an error reporting service
    */
   error: (...args: unknown[]): void => {
-    console.error(...args);
+    consoleApi?.error?.(...args);
     // In production, could send to error reporting service here
     // Example: Sentry.captureException(args[0]);
   },
@@ -33,7 +34,7 @@ export const logger = {
    */
   warn: (...args: unknown[]): void => {
     if (isDevelopment) {
-      console.warn(...args);
+      consoleApi?.warn?.(...args);
     }
   },
 
@@ -42,7 +43,7 @@ export const logger = {
    */
   debug: (...args: unknown[]): void => {
     if (isDevelopment) {
-      console.debug(...args);
+      consoleApi?.debug?.(...args);
     }
   }
 };

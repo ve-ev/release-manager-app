@@ -7,6 +7,10 @@ interface Permissions {
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  /** Full release manager (can freeze/unfreeze, view audit, release/unrelease). */
+  isReleaseManager: boolean;
+  /** Limited manager (can edit releases but not lifecycle actions). */
+  isLightManager: boolean;
 }
 
 /**
@@ -17,40 +21,46 @@ export function usePermissions(api: API) {
     canAccessSettings: false,
     canCreate: false,
     canEdit: false,
-    canDelete: false
+    canDelete: false,
+    isReleaseManager: false,
+    isLightManager: false
   });
 
   useEffect(() => {
     let isMounted = true;
-    
+
     const loadPermissions = async () => {
       try {
         const response = await api.getPermissions();
-        if (!isMounted) return;
-        
+        if (!isMounted) {return;}
+
         const isReleaseManager = response.isManager;
         const isLightManager = response.isLightManager;
         setPermissions({
           canAccessSettings: isReleaseManager,
           canCreate: isReleaseManager,
           canEdit: isLightManager || isReleaseManager,
-          canDelete: isReleaseManager
+          canDelete: isReleaseManager,
+          isReleaseManager,
+          isLightManager
         });
       } catch (error) {
         logger.error('Failed to load permissions:', error);
-        if (!isMounted) return;
-        
+        if (!isMounted) {return;}
+
         setPermissions({
           canAccessSettings: false,
           canCreate: false,
           canEdit: false,
-          canDelete: false
+          canDelete: false,
+          isReleaseManager: false,
+          isLightManager: false
         });
       }
     };
-    
+
     loadPermissions();
-    
+
     return () => {
       isMounted = false;
     };

@@ -15,7 +15,7 @@ export function useExpandedState(api: API) {
     const loadExpanded = async () => {
       try {
         const res = await api.getExpandedVersion();
-        if (!isMounted) return;
+        if (!isMounted) {return;}
         
         const v = res && res.expandedVersion;
         if (v !== undefined && v !== null) {

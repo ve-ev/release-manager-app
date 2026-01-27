@@ -33,6 +33,7 @@ interface ReleaseTableProps {
   /** Permissions */
   canEdit?: boolean;
   canDelete?: boolean;
+  isReleaseManager?: boolean;
   /** Manual issue management flag */
   manualIssueManagement?: boolean;
   /** Feature flag for meta issues */
@@ -62,6 +63,7 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
   host,
   canEdit,
   canDelete,
+  isReleaseManager,
   manualIssueManagement,
   metaIssuesEnabled,
   handleAddMetaIssue,
@@ -69,6 +71,8 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
   settings,
   progressSettings
 }) => {
+  const canSeeActions = !!canEdit || !!isReleaseManager;
+
   /** Set of IDs for release versions with expanded info sections */
   const [expandedInfoSections, setExpandedInfoSections] = useState<Set<string | number>>(new Set());
 
@@ -196,6 +200,7 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
         host={host}
         canEdit={canEdit}
         canDelete={canDelete}
+        isReleaseManager={isReleaseManager}
         manualIssueManagement={manualIssueManagement}
         metaIssuesEnabled={metaIssuesEnabled}
         handleAddMetaIssue={handleAddMetaIssue}
@@ -222,6 +227,7 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
     host,
     canEdit,
     canDelete,
+    isReleaseManager,
     manualIssueManagement,
     metaIssuesEnabled,
     handleAddMetaIssue,
@@ -276,6 +282,7 @@ const ReleaseTableComponent: React.FC<ReleaseTableProps> = ({
       <TableHeader
         showProductColumn={showProductColumn}
         showProgressColumn={showProgressColumn}
+        showActionsColumn={canSeeActions}
         sortKey={sortKey}
         sortDirection={sortDirection}
         onSort={handleSort}

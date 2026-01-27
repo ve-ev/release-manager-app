@@ -1,0 +1,217 @@
+.audit-events-overlay {
+  position: fixed;
+  inset: 0;
+  /* Use a stronger dim + slight blur so the dialog reads well on light/white pages */
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  /* Create containing block for the backdrop button */
+  /* (keep fixed; relative here would break full-screen positioning) */
+}
+
+.audit-events-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  z-index: 0;
+}
+
+.audit-events-panel {
+  width: min(900px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  background: var(--ring-content-background-color, #fff);
+  z-index: 1;
+}
+
+.audit-events-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ring-line-color);
+}
+
+.audit-events-header .title {
+  font-weight: 600;
+}
+
+.audit-events-container {
+  padding: 12px 16px;
+  overflow: auto;
+}
+
+.events-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.event-row {
+  display: grid;
+  grid-template-columns: 180px 190px 1fr;
+  grid-template-areas: "type at meta";
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--ring-line-color, rgba(0, 0, 0, 0.10));
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.015);
+}
+
+.event-row:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+@media (max-width: 720px) {
+  .event-row {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "type"
+      "at"
+      "meta";
+    gap: 6px;
+  }
+}
+
+.event-type {
+  grid-area: type;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 600;
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-at {
+  grid-area: at;
+  opacity: 0.85;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.event-meta {
+  grid-area: meta;
+  opacity: 0.9;
+  min-width: 0;
+}
+
+.event-meta-line {
+  line-height: 1.35;
+}
+
+.event-details {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.10);
+}
+
+.event-details-title {
+  font-size: 12px;
+  opacity: 0.9;
+  margin-bottom: 4px;
+}
+
+.event-description-details {
+  /* Keep details visually aligned with other blocks, but make summary clickable */
+}
+
+.event-description-details > summary.event-details-title {
+  cursor: pointer;
+  user-select: none;
+}
+
+.event-description-details > summary.event-details-title::-webkit-details-marker {
+  margin-right: 6px;
+}
+
+.event-description-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 720px) {
+  .event-description-diff {
+    grid-template-columns: 1fr;
+  }
+}
+
+.event-description-col-title {
+  font-size: 12px;
+  opacity: 0.85;
+  margin-bottom: 4px;
+}
+
+.event-description-text {
+  margin: 0;
+  padding: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.02);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.event-description-empty {
+  opacity: 0.75;
+}
+
+.diff-removed {
+  background: rgba(255, 66, 66, 0.18);
+}
+
+.diff-added {
+  background: rgba(0, 178, 107, 0.18);
+}
+
+.event-issues {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.event-issue {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.event-issue-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  white-space: nowrap;
+}
+
+.event-issue-summary {
+  opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-events-container .empty {
+  opacity: 0.8;
+}

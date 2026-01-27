@@ -94,15 +94,16 @@
   flex-shrink: 0; /* keep fixed width like actions-cell */
   display: flex;
   align-items: center;
-  justify-content: flex-start; /* align with header and other cells */
+  justify-content: center;
 }
 
 /* Ensure header cell for Progress aligns and sizes like other headers/columns */
 .version-list-header-cell.progress-cell {
   width: 200px;
+  flex-shrink: 0; /* match body cell sizing */
   display: flex;
   align-items: center;
-  justify-content: flex-start; /* match other headers alignment */
+  justify-content: center;
 }
 
 /* Fix for progress bar in version-list-row */

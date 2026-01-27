@@ -56,6 +56,82 @@ export interface MetaIssue {
   relatedIssueIds: string[];
 }
 
+export type FrozenZone = 'green' | 'yellow' | 'red' | 'grey';
+
+export interface FrozenIssueSnapshot {
+  id: string;
+  idReadable?: string;
+  summary: string;
+  isMeta?: boolean;
+  metaRelatedIssueIds?: string[];
+  // Manual override snapshot (if any)
+  manualStatus?: 'Unresolved' | 'Fixed' | 'Merged' | 'Discoped';
+  // Manual test status snapshot (if any)
+  manualTestStatus?: 'Tested' | 'Not tested' | 'Test NA';
+  // Resolved progress zone at freeze time (after considering manual override)
+  zone: FrozenZone;
+  // Raw field value used for zone computation (if any)
+  fieldName?: string;
+  fieldValue?: string | null;
+
+  /**
+   * For freezing expandable per-issue progress indicators.
+   * Matches what `LinkedIssueItem` uses: parent field value + a set of subtask field values.
+   */
+  parentFieldValue?: string | null;
+  subtaskFieldValues?: Array<{ id: string; idReadable?: string; fieldValue: string | null }>;
+}
+
+export interface FrozenProgressSnapshot {
+  capturedAt: string;
+  freezeTimestamp: string;
+  issues: FrozenIssueSnapshot[];
+  // Issues excluded from progress (e.g., Discoped)
+  excludedIssueIds: string[];
+  progress: {
+    green: number;
+    yellow: number;
+    red: number;
+    grey: number;
+    total: number;
+  };
+}
+
+export interface ReleaseAuditEvent {
+  type:
+    | 'FREEZE_CONFIRMED'
+    | 'UNFROZEN'
+    | 'STATUS_CHANGED'
+    | 'RELEASE_COMPLETED'
+    | 'SNAPSHOT_REGENERATED'
+    | 'PLANNED_ISSUES_CHANGED'
+    | 'DESCRIPTION_CHANGED';
+  at: string;
+  by?: string;
+  /** Release identifier for cross-referencing audit entries (optional for backward compatibility). */
+  releaseId?: string;
+  /** Human-readable release version (optional for backward compatibility). */
+  releaseVersion?: string;
+  fromStatus?: ReleaseStatus;
+  toStatus?: ReleaseStatus;
+
+  /** Issue snapshot at the moment of the event (when applicable). */
+  plannedIssuesSnapshot?: Array<{ id: string; summary?: string }>;
+
+  /** For `PLANNED_ISSUES_CHANGED`. */
+  fromPlannedCount?: number;
+  toPlannedCount?: number;
+  addedPlannedIssueIds?: string[];
+  removedPlannedIssueIds?: string[];
+  addedPlannedIssues?: Array<{ id: string; summary?: string }>;
+  removedPlannedIssues?: Array<{ id: string; summary?: string }>;
+  plannedReordered?: boolean;
+
+  /** For `DESCRIPTION_CHANGED`. */
+  fromDescription?: string;
+  toDescription?: string;
+}
+
 export interface ReleaseVersion {
   id: string;
   version: string;
@@ -65,6 +141,12 @@ export interface ReleaseVersion {
   product?: string;
   status?: ReleaseStatus;
   freezeConfirmed?: boolean;
+  /** Immutable timestamp set when freeze is confirmed (ISO string). */
+  freezeTimestamp?: string;
+  /** Stored issue/progress snapshot captured at `freezeTimestamp`. */
+  snapshot?: FrozenProgressSnapshot;
+  /** Audit trail (append-only). */
+  auditEvents?: ReleaseAuditEvent[];
   plannedIssues?: PlannedOrMetaIssue[];
   linkedIssues?: PlannedOrMetaIssue[];
   // Dedicated meta issues collection (used by form); renderer may merge it into planned issues

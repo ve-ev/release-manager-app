@@ -50,6 +50,7 @@ export interface VersionItemHeaderProps {
   /** Permissions */
   canEdit?: boolean;
   canDelete?: boolean;
+  isReleaseManager?: boolean;
   /** Manual issue management flag */
   manualIssueManagement?: boolean;
   /** Feature flag for meta issues */
@@ -85,12 +86,28 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
   showProgressColumn = true,
   canEdit,
   canDelete,
+  isReleaseManager,
   handleAddMetaIssue,
   handleGenerateReleaseNotes,
   progressSettings,
   issueStatusMap,
   statusesLoaded = true
 }) => {
+  const isReleased = item.status === 'Released';
+  const isFreezeConfirmed = !!item.freezeConfirmed;
+
+  // Only release managers and light managers should see the Actions dropdown at all.
+  // `canEdit` is granted to both full and light managers by `usePermissions`.
+  const canSeeActions = !!canEdit || !!isReleaseManager;
+
+  // Lifecycle rules:
+  // - No freeze: all editable
+  // - Freeze confirmed: cannot add/remove issues, but progress is live and manual mgmt is available
+  // - Released: fully frozen UI until status changes away from Released
+  const canEditRelease = !!canEdit && !isReleased;
+  const canAddIssues = canEditRelease && !isFreezeConfirmed;
+  const canChangeStatus = !!canEdit && (!isReleased || !!isReleaseManager);
+
   // Memoize empty progressSettings to prevent unnecessary re-renders
   const effectiveProgressSettings = useMemo(() => progressSettings || {
     customFieldNames: [],
@@ -116,11 +133,28 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
       return;
     }
 
+    // Transitions to/from Released require confirmation and are manager-only
+    const toReleased = newStatus === 'Released';
+    const fromReleased = item.status === 'Released' && newStatus !== 'Released';
+    if (toReleased || fromReleased) {
+      window.dispatchEvent(new CustomEvent('request-release-status-change', {
+        detail: { item, newStatus }
+      }));
+      return;
+    }
+
     api.updateReleaseVersion({ ...item, status: newStatus })
-      .then(() => {
+      .then((updated) => {
         // Dispatch targeted update to avoid full table refresh
         window.dispatchEvent(new CustomEvent('release-version-status-updated', {
-          detail: { id: item.id, status: newStatus }
+          detail: {
+            id: updated.id,
+            status: updated.status,
+            freezeConfirmed: updated.freezeConfirmed,
+            freezeTimestamp: updated.freezeTimestamp || null,
+            snapshot: updated.snapshot || null,
+            auditEvents: updated.auditEvents || null
+          }
         }));
       })
       .catch((error: unknown) => {
@@ -131,16 +165,54 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
   // Handler to confirm feature freeze
   const handleConfirmFreeze = useCallback(() => {
     api.updateReleaseVersion({ ...item, freezeConfirmed: true })
-      .then(() => {
+      .then((updated) => {
         // Dispatch targeted update to avoid full table refresh
         window.dispatchEvent(new CustomEvent('release-version-status-updated', {
-          detail: { id: item.id, status: item.status, freezeConfirmed: true }
+          detail: {
+            id: updated.id,
+            status: updated.status,
+            freezeConfirmed: updated.freezeConfirmed,
+            freezeTimestamp: updated.freezeTimestamp || null,
+            snapshot: updated.snapshot || null,
+            auditEvents: updated.auditEvents || null
+          }
         }));
       })
       .catch((error: unknown) => {
         console.error('Failed to confirm freeze', error);
       });
   }, [item]);
+
+  const handleUnfreeze = useCallback(() => {
+    api.updateReleaseVersion({ ...item, freezeConfirmed: false })
+      .then((updated) => {
+        window.dispatchEvent(new CustomEvent('release-version-status-updated', {
+          detail: {
+            id: updated.id,
+            status: updated.status,
+            freezeConfirmed: updated.freezeConfirmed,
+            freezeTimestamp: updated.freezeTimestamp || null,
+            snapshot: updated.snapshot || null,
+            auditEvents: updated.auditEvents || null
+          }
+        }));
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to unfreeze release', error);
+      });
+  }, [item]);
+
+  const handleViewAuditEvents = useCallback(() => {
+    if (!isReleaseManager) {
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('open-audit-events-dialog', {
+      detail: {
+        version: item.version,
+        events: item.auditEvents || []
+      }
+    }));
+  }, [item.version, item.auditEvents, isReleaseManager]);
 
   // Individual action handlers
   const handleEditClick = useCallback(() => {
@@ -189,33 +261,46 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
   const showConfirmFreeze = useMemo(() => {
     return (item.featureFreezeDate &&
       (isToday(item.featureFreezeDate) || isExpired(item.featureFreezeDate))) &&
-      !item.freezeConfirmed;
-  }, [item.featureFreezeDate, item.freezeConfirmed]);
+      !item.freezeConfirmed &&
+      !isReleased;
+  }, [item.featureFreezeDate, item.freezeConfirmed, isReleased]);
 
   // Memoize status dropdown menu items
   const statusMenuItems = useMemo(() => {
-    return STATUS_DROPDOWN_OPTIONS.map(st => ({
+    const allowed = STATUS_DROPDOWN_OPTIONS.filter(st => {
+      if (st === 'Released' && !isReleaseManager) {
+        return false;
+      }
+      return true;
+    });
+    return allowed.map(st => ({
       label: st,
       onClick: (_menuItem: ListDataItem<unknown>, event: Event | React.SyntheticEvent<Element>) => {
         event.stopPropagation?.();
         handleStatusUpdate(st);
       }
     })) as readonly ListDataItem<unknown>[];
-  }, [handleStatusUpdate]);
+  }, [handleStatusUpdate, isReleaseManager]);
 
   // Memoize actions dropdown menu items
   const actionsMenuItems = useMemo(() => {
+    if (!canSeeActions) {
+      return [] as readonly ListDataItem<unknown>[];
+    }
+
     const items: Array<ListDataItem<unknown>> = [];
 
-    if (canEdit) {
+    if (canEditRelease) {
       items.push(createMenuItem('Edit', handleEditClick, 'edit-action'));
 
       // Always allow adding issues regardless of meta-issue feature flag.
       // When metaIssuesEnabled is false, the AddIssueDialog will hide the Meta tab
       // and allow adding only existing issues.
-      items.push(createMenuItem('Add Issue', handleAddMetaIssueClick, 'add-issue-action'));
+      if (canAddIssues) {
+        items.push(createMenuItem('Add Issue', handleAddMetaIssueClick, 'add-issue-action'));
+      }
 
-      if (showConfirmFreeze) {
+      if (showConfirmFreeze && isReleaseManager) {
         items.push(createMenuItem('Confirm Freeze', handleConfirmFreeze, 'confirm-freeze-action'));
       }
     }
@@ -223,12 +308,22 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
     // Always available: Generate Release Notes action
     items.push(createMenuItem('Generate Release Notes', handleGenerateNotesClick, 'generate-release-notes-action'));
 
+    // Audit events viewer (release managers only)
+    if (isReleaseManager) {
+      items.push(createMenuItem('View Audit Events', handleViewAuditEvents, 'view-audit-events-action'));
+    }
+
+    // Unfreeze (only if frozen and not released)
+    if (isReleaseManager && item.freezeConfirmed && item.status !== 'Released') {
+      items.push(createMenuItem('Unfreeze', handleUnfreeze, 'unfreeze-action'));
+    }
+
     if (canDelete) {
       items.push(createMenuItem('Delete', handleDeleteClick, 'delete-action'));
     }
 
     return items;
-  }, [canEdit, canDelete, showConfirmFreeze, createMenuItem, handleEditClick, handleAddMetaIssueClick, handleConfirmFreeze, handleGenerateNotesClick, handleDeleteClick]);
+  }, [canSeeActions, canEditRelease, canAddIssues, canDelete, showConfirmFreeze, createMenuItem, handleEditClick, handleAddMetaIssueClick, handleConfirmFreeze, handleGenerateNotesClick, handleDeleteClick, handleViewAuditEvents, item.freezeConfirmed, item.status, isReleaseManager, handleUnfreeze]);
 
   // Memoize status tag element
   const statusTagElement = useMemo(() => (
@@ -253,28 +348,42 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
       );
     }
 
+    // Frozen snapshot can legitimately have total=0 (e.g. all issues Discoped at freeze).
+    // Show a stable frozen-state message instead of rendering a 0-total progress bar.
+    if (item.freezeTimestamp && item.snapshot && item.snapshot.progress.total === 0) {
+      return <div className="no-progress">Frozen snapshot contains no counted issues</div>;
+    }
+
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {mainAvailable && progressSettings && (
+      <div>
+        {mainAvailable && (
           <ProgressBar
             total={mainProgress.total}
             green={mainProgress.green}
             yellow={mainProgress.yellow}
             red={mainProgress.red}
             grey={mainProgress.grey}
-            greenColor={progressSettings.greenColor}
-            yellowColor={progressSettings.yellowColor}
-            redColor={progressSettings.redColor}
-            greyColor={progressSettings.greyColor}
+            greenColor={effectiveProgressSettings.greenColor}
+            yellowColor={effectiveProgressSettings.yellowColor}
+            redColor={effectiveProgressSettings.redColor}
+            greyColor={effectiveProgressSettings.greyColor}
             className="no-counters"
           />
         )}
       </div>
     );
-  }, [item.plannedIssues, mainAvailable, mainProgress, progressSettings]);
+  }, [item.plannedIssues, item.freezeTimestamp, item.snapshot, mainAvailable, mainProgress, effectiveProgressSettings]);
 
   return (
-    <div className="version-list-row">
+    <div
+      className={[
+        'version-list-row',
+        'version-list-grid',
+        showProductColumn ? null : 'no-product',
+        showProgressColumn ? null : 'no-progress',
+        canSeeActions ? null : 'no-actions'
+      ].filter(Boolean).join(' ')}
+    >
       <div className="version-list-cell expand-cell">
         <Expander
           closed={isClosed}
@@ -298,7 +407,7 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
       ) : null}
       <div className="version-list-cell status-cell">
         {displayStatus && (
-          canEdit ? (
+          canChangeStatus ? (
             <DropdownMenu<unknown>
               menuProps={menuProps}
               anchor={statusTagElement}
@@ -308,33 +417,37 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
           ) : statusTagElement
         )}
       </div>
-      <div className="version-list-cell date-cell">
-        <span className={releaseDateClassName}>
-          {formatDate(item.releaseDate)}
-        </span>
-      </div>
-      <div className="version-list-cell date-cell">
+      <div className="version-list-cell date-cell feature-freeze-cell">
         <span className={featureFreezeDateClassName}>
           {formatDate(item.featureFreezeDate)}
         </span>
       </div>
-      <div className="version-list-cell actions-cell">
-        <div className="actions">
-          <DropdownMenu<unknown>
-            menuProps={menuProps}
-            anchor={(
-              <Button
-                title="Actions"
-                data-test="actions-button"
-              >
-                Actions
-              </Button>
-            )}
-            data={actionsMenuItems}
-            onSelect={handleMenuSelect}
-          />
-        </div>
+      <div className="version-list-cell date-cell release-date-cell">
+        <span className={releaseDateClassName}>
+          {formatDate(item.releaseDate)}
+        </span>
       </div>
+      {canSeeActions ? (
+        <div className="version-list-cell actions-cell">
+          <div className="actions">
+            {actionsMenuItems.length > 0 ? (
+              <DropdownMenu<unknown>
+                menuProps={menuProps}
+                anchor={(
+                  <Button
+                    title="Actions"
+                    data-test="actions-button"
+                  >
+                    Actions
+                  </Button>
+                )}
+                data={actionsMenuItems}
+                onSelect={handleMenuSelect}
+              />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

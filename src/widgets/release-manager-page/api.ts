@@ -1,6 +1,7 @@
 import {HostAPI} from "../../../@types/globals";
 import {ReleaseVersion} from "./interfaces";
 import {AppSettings, Permissions} from "./interfaces";
+import {logger} from './utils/logger';
 /* eslint-disable complexity */
 
 let cachedSettings: unknown | undefined;
@@ -80,7 +81,7 @@ export class API {
         }
       );
     } catch (error) {
-      console.error('Batch field fetch failed:', error);
+      logger.error('Batch field fetch failed:', error);
       // Return empty results for all issues
       return Object.fromEntries(issueIds.map(id => [id, { items: [] }]));
     }
@@ -162,7 +163,7 @@ export class API {
   /**
    * Update an existing release version
    */
-  async updateReleaseVersion(releaseVersion: ReleaseVersion): Promise<void> {
+  async updateReleaseVersion(releaseVersion: ReleaseVersion): Promise<ReleaseVersion> {
     if (!releaseVersion.id) {
       throw new Error('Release version ID is required for update');
     }
@@ -171,7 +172,7 @@ export class API {
       method: 'PUT',
       body: releaseVersion,
       scope: true,
-    });
+    }) as Promise<ReleaseVersion>;
   }
 
   /**

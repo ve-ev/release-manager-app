@@ -12,6 +12,22 @@ export const formatDate = (dateString?: string) => {
   return date.toLocaleDateString('en-US', options);
 };
 
+// Format date+time for display (MMM DD, YYYY HH:MM)
+export const formatDateTime = (dateString?: string) => {
+  if (!dateString) {
+    return '';
+  }
+  const date = new Date(dateString);
+  const options: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  };
+  return date.toLocaleString('en-US', options);
+};
+
 // Check if a date is today
 export const isToday = (dateString?: string): boolean => {
   if (!dateString) {

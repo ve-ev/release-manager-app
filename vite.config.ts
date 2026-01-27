@@ -51,6 +51,28 @@ export default defineConfig({
         // List every widget entry point here
         releaseManagerPage: resolve(__dirname, 'src/widgets/release-manager-page/index.html'),
 
+      },
+      output: {
+        manualChunks(id): string | undefined {
+          if (!id.includes('node_modules')) {
+            return undefined;
+          }
+
+          const rules: Array<{name: string; match: string[]}> = [
+            {name: 'react-vendor', match: ['/react/', '/react-dom/']},
+            {name: 'ring-ui', match: ['/@jetbrains/ring-ui-built/']},
+            {name: 'react-virtualized', match: ['/react-virtualized/']},
+            {name: 'markdown', match: ['/marked/', '/dompurify/']}
+          ];
+
+          for (const rule of rules) {
+            if (rule.match.some((substring) => id.includes(substring))) {
+              return rule.name;
+            }
+          }
+
+          return 'vendor';
+        }
       }
     }
   }
