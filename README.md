@@ -19,14 +19,16 @@ The app ships as a widget for PROJECT_SETTINGS and uses a lightweight backend to
 - Use the **Generic Add Issue Action** to quickly attach arbitrary issues to a release from the table
 - Keep releases in sync with your YouTrack project by enabling the **Custom Field Mapping** feature, which links a planned release custom field in issues with Release Versions in this app
 - Filters and sorting for quick navigation across releases
+- Audit Event Log for key release version changes (status, freeze/unfreeze, planned issues, description)
 - Visual indicators for feature freeze and release deadlines (today/overdue)
+- Freeze progress and issue/status updates when a release is in **Released** state (stores a snapshot to keep historical progress stable)
 - Generate Markdown release notes from the release definition and planned issues
 - Per-user expansion state remembered to keep context across sessions
 
 ## Feature Overview
 
 1. Release Versions
-   - Fields: id, tag (stored in the `product` field for backward compatibility), version, description, additionalInfo, featureFreezeDate, releaseDate, status (Planning | In progress | Released | Overdue | Canceled), freezeConfirmed (flag), plannedIssues, linkedIssues, metaIssues.
+   - Fields: id, tag (stored in the `product` field for backward compatibility), version, description, additionalInfo, featureFreezeDate, releaseDate, status (Planning | In progress | Released | Overdue | Canceled), freezeConfirmed (flag), freezeTimestamp, plannedIssues, linkedIssues, metaIssues, snapshot, auditEvents.
    - Validation (enforced server-side):
      - version is required
      - releaseDate is required
@@ -45,6 +47,9 @@ The app ships as a widget for PROJECT_SETTINGS and uses a lightweight backend to
      - greenZoneValues (Completed), yellowZoneValues (In Progress), redZoneValues (Blocked).
    - The app tries the first available custom field name across issues (parent/meta and subtasks) to derive per-issue values.
    - A progress bar summarizes the current state (UI components and styles under components/table/progress and styles/progress-bar.css).
+   - Released-state snapshot:
+     - When a release transitions to **Released**, the backend captures a snapshot of progress + issue state used by the UI.
+     - While **Released**, the UI renders progress from the stored snapshot and disables updates that would change historical numbers.
 
 4. Tags
    - Optional list of tags configured in Settings, each with a color. Color can be edited or auto-generated deterministically based on tag name.
@@ -70,6 +75,7 @@ The app ships as a widget for PROJECT_SETTINGS and uses a lightweight backend to
      - canCreate: managers
      - canEdit: light managers or managers
      - canDelete: managers
+     - canViewAudit: managers (audit events are stripped from release payloads for non-managers)
 
 8. UX Details
    - Empty state page guiding first-time users to configure settings or create the first release.
@@ -78,7 +84,11 @@ The app ships as a widget for PROJECT_SETTINGS and uses a lightweight backend to
    - Auto-refresh: polling every 5 seconds reconciles the list with minimal re-renders.
    - Inline success alerts for create/update/delete operations and confirmation dialogs for delete.
 
-9. Release Notes
+9. Audit Event Log
+   - Release versions maintain an `auditEvents` array with key events (e.g., status transitions, freeze/unfreeze, planned issues changes, description changes).
+   - The UI exposes these events via a dialog; visibility is restricted to release managers.
+
+10. Release Notes
    - Generate Markdown based on release data and planned issues. When manual issue management is enabled and issue statuses are available, Discoped issues are excluded.
    - The dialog shows the generated Markdown for copy/paste or further processing.
 
