@@ -14,6 +14,99 @@ const normalizePreview = (s?: string): string => {
   return compact.length > MAX_PREVIEW_LEN ? `${compact.slice(0, MAX_PREVIEW_LEN)}…` : compact;
 };
 
+const normalizeFullText = (s?: string): string => (s ?? '').toString().replace(/\r\n/g, '\n');
+
+const formatLen = (s?: string): string => {
+  const raw = (s ?? '').toString();
+  return raw.length.toString();
+};
+
+const buildInlineChangedSpan = (
+  text: string,
+  prefixLen: number,
+  suffixLen: number,
+  changedClassName: string
+): React.ReactNode => {
+  const start = text.slice(0, prefixLen);
+  const changed = text.slice(prefixLen, Math.max(prefixLen, text.length - suffixLen));
+  const end = text.slice(Math.max(prefixLen, text.length - suffixLen));
+
+  return (
+    <>
+      {start}
+      {changed.length > 0 ? <span className={changedClassName}>{changed}</span> : null}
+      {end}
+    </>
+  );
+};
+
+const getCommonAffixes = (from: string, to: string): {prefixLen: number; suffixLen: number} => {
+  // Find common prefix/suffix to highlight the changed middle part.
+  let i = 0;
+  const minLen = Math.min(from.length, to.length);
+  while (i < minLen && from[i] === to[i]) { i += 1; }
+
+  let j = 0;
+  while (j < (minLen - i) && from[from.length - 1 - j] === to[to.length - 1 - j]) {
+    j += 1;
+  }
+
+  return {prefixLen: i, suffixLen: j};
+};
+
+const renderDescriptionText = (
+  text: string,
+  isEmptyChange: boolean,
+  prefixLen: number,
+  suffixLen: number,
+  changedClassName: string
+): React.ReactNode => {
+  if (text.length === 0) {
+    return <span className="event-description-empty">&lt;empty&gt;</span>;
+  }
+
+  if (isEmptyChange) {
+    return text;
+  }
+
+  return buildInlineChangedSpan(text, prefixLen, suffixLen, changedClassName);
+};
+
+const renderDescriptionDiffBlock = (ev: ReleaseAuditEvent): React.ReactNode => {
+  if (ev.type !== 'DESCRIPTION_CHANGED') { return null; }
+
+  const from = normalizeFullText(ev.fromDescription);
+  const to = normalizeFullText(ev.toDescription);
+
+  const {prefixLen, suffixLen} = getCommonAffixes(from, to);
+
+  const isEmptyChange = from === to;
+
+  return (
+    <details className="event-details event-description-details" data-test="audit-event-description-diff">
+      <summary className="event-details-title">
+        Description diff
+      </summary>
+
+      <div className="event-description-diff">
+        <div className="event-description-col">
+          <div className="event-description-col-title">Before</div>
+          <pre className="event-description-text">
+            {renderDescriptionText(from, isEmptyChange, prefixLen, suffixLen, 'diff-removed')}
+          </pre>
+        </div>
+
+        <div className="event-description-col">
+          <div className="event-description-col-title">After</div>
+          <pre className="event-description-text">
+            {renderDescriptionText(to, isEmptyChange, prefixLen, suffixLen, 'diff-added')}
+          </pre>
+        </div>
+      </div>
+    </details>
+  );
+};
+
 const renderIssuesBlock = (
   title: string,
   issues?: Array<{id: string; summary?: string}>
@@ -64,7 +157,11 @@ const getPlannedIssuesChangedPart = (ev: ReleaseAuditEvent): string => {
 
 const getDescriptionChangedPart = (ev: ReleaseAuditEvent): string => {
   if (ev.type !== 'DESCRIPTION_CHANGED') { return ''; }
-  return `description: "${normalizePreview(ev.fromDescription)}" → "${normalizePreview(ev.toDescription)}"`;
+  const fromLen = formatLen(ev.fromDescription);
+  const toLen = formatLen(ev.toDescription);
+
+  // Keep the meta line compact; details are shown in an expandable block below.
+  return `description changed (${fromLen} → ${toLen} chars)"`;
 };
 
 const getByPart = (ev: ReleaseAuditEvent): string => ev.by ? `by ${ev.by}` : '';
@@ -149,6 +246,8 @@ export const AuditEventsDialog: React.FC<AuditEventsDialogProps> = ({open, versi
                     <div className="event-at">{formatDateTime(ev.at)}</div>
                     <div className="event-meta">
                       {buildEventMetaText(ev) ? <div className="event-meta-line">{buildEventMetaText(ev)}</div> : null}
+
+                      {renderDescriptionDiffBlock(ev)}
 
                       {renderIssuesBlock('Planned issues', ev.plannedIssuesSnapshot)}
 

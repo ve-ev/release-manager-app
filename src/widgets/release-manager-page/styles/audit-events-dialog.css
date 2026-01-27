@@ -95,6 +95,64 @@
   margin-bottom: 4px;
 }
 
+.event-description-details {
+  /* Keep details visually aligned with other blocks, but make summary clickable */
+}
+
+.event-description-details > summary.event-details-title {
+  cursor: pointer;
+  user-select: none;
+}
+
+.event-description-details > summary.event-details-title::-webkit-details-marker {
+  margin-right: 6px;
+}
+
+.event-description-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 720px) {
+  .event-description-diff {
+    grid-template-columns: 1fr;
+  }
+}
+
+.event-description-col-title {
+  font-size: 12px;
+  opacity: 0.85;
+  margin-bottom: 4px;
+}
+
+.event-description-text {
+  margin: 0;
+  padding: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.02);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.event-description-empty {
+  opacity: 0.75;
+}
+
+.diff-removed {
+  background: rgba(255, 66, 66, 0.18);
+}
+
+.diff-added {
+  background: rgba(0, 178, 107, 0.18);
+}
+
 .event-issues {
   list-style: none;
   padding: 0;
