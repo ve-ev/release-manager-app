@@ -196,6 +196,23 @@ function isReleaseManager(ctx) {
 }
 
 /**
+ * Removes audit event records from release objects for users who are not release managers.
+ * NOTE: This only affects HTTP responses, not persisted storage.
+ *
+ * @param {Object} releaseVersion
+ * @param {boolean} canViewAudit
+ * @returns {Object}
+ */
+function stripAuditEventsIfNeeded(releaseVersion, canViewAudit) {
+    if (canViewAudit) { return releaseVersion; }
+    if (!releaseVersion || typeof releaseVersion !== 'object') { return releaseVersion; }
+    if (!('auditEvents' in releaseVersion)) { return releaseVersion; }
+    const copy = Object.assign({}, releaseVersion);
+    delete copy.auditEvents;
+    return copy;
+}
+
+/**
  * Reads issue status override map from project extension properties.
  * Stored by Release Manager as: { issueStatuses: { [id]: status }, testStatuses: {...} }
  * @param {Object} ctx
@@ -1125,7 +1142,11 @@ exports.httpHandler = {
             handle: function handle(ctx) {
                 try {
                     const releaseVersions = getReleaseVersions(ctx);
-                    ctx.response.json(releaseVersions);
+                    const canViewAudit = isReleaseManager(ctx);
+                    const out = canViewAudit
+                        ? releaseVersions
+                        : releaseVersions.map(function (rv) { return stripAuditEventsIfNeeded(rv, canViewAudit); });
+                    ctx.response.json(out);
                 } catch (error) {
                     logError('Failed to get release versions', error);
                     sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
@@ -1146,7 +1167,8 @@ exports.httpHandler = {
                     const releaseVersion = releaseVersions.find(rv => rv.id === id);
 
                     if (releaseVersion) {
-                        ctx.response.json(releaseVersion);
+                        const canViewAudit = isReleaseManager(ctx);
+                        ctx.response.json(stripAuditEventsIfNeeded(releaseVersion, canViewAudit));
                     } else {
                         sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Release version not found');
                     }
@@ -1212,7 +1234,8 @@ exports.httpHandler = {
                         }
 
                         ctx.response.code = HTTP_STATUS.CREATED;
-                        ctx.response.json(releaseVersion);
+                        const canViewAudit = isReleaseManager(ctx);
+                        ctx.response.json(stripAuditEventsIfNeeded(releaseVersion, canViewAudit));
                     } else {
                         sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Failed to save release version');
                     }
@@ -1236,7 +1259,8 @@ exports.httpHandler = {
                     const updatedReleaseVersion = ctx.request.json();
                     const updated = updateReleaseById(ctx, id, updatedReleaseVersion);
                     if (updated) {
-                        ctx.response.json(updated);
+                        const canViewAudit = isReleaseManager(ctx);
+                        ctx.response.json(stripAuditEventsIfNeeded(updated, canViewAudit));
                     } else {
                         sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Failed to update release version');
                     }
