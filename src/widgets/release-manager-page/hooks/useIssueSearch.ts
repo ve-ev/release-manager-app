@@ -27,21 +27,21 @@ export function useIssueSearch(host: HostAPI): UseIssueSearchReturn {
   // eslint-disable-next-line complexity
   const searchIssues = useCallback(async (input: string, existingIssues: IssueData[] = []): Promise<IssueData[]> => {
     setSearchError(undefined);
-    
+
     const ids = input
       .split(',')
       .map(s => s.trim())
       .filter(Boolean);
-    
+
     if (ids.length === 0) {
       return [];
     }
 
     setIsLoadingIssues(true);
-    
+
     // Batch fetch all issues in ONE request instead of sequential calls
     const results = await fetchIssuesBatch(host, ids);
-    
+
     const newIssues: IssueData[] = [];
     const notFound: string[] = [];
 
@@ -52,7 +52,7 @@ export function useIssueSearch(host: HostAPI): UseIssueSearchReturn {
         notFound.push(res.issueId || 'unknown');
       }
     });
-    
+
     setIsLoadingIssues(false);
 
     // Set error if any issues weren't found
@@ -66,12 +66,12 @@ export function useIssueSearch(host: HostAPI): UseIssueSearchReturn {
     // Filter out duplicates
     const existing = existingIssues || [];
     const unique = newIssues.filter(ni => !existing.some(e => e.id === ni.id));
-    
+
     if (unique.length === 0 && newIssues.length > 0) {
       setSearchError('All issues are already added to the list.');
       return [];
     }
-    
+
     return unique;
   }, [host]);
 

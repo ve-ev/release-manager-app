@@ -259,9 +259,8 @@ const AppComponent: React.FunctionComponent = () => {
       setCurrentReleaseVersion(undefined);
       // Important: reset meta-issue auto-open flag after save to avoid leaking into next form opening
       setInitialShowMetaIssueForm(false);
-    // eslint-disable-next-line no-catch-shadow,no-shadow
-    } catch (error) {
-      logger.error('Failed to save release version:', error);
+    } catch (saveError) {
+      logger.error('Failed to save release version:', saveError);
       setAlertMessage('Failed to save release version. Please try again.');
       // Don't rethrow - handle gracefully with user feedback
     }
@@ -283,11 +282,10 @@ const AppComponent: React.FunctionComponent = () => {
       await api.deleteReleaseVersion(confirmDeleteId);
       setAlertMessage('Release version deleted successfully');
       await fetchReleaseVersions();
-    // eslint-disable-next-line no-catch-shadow,no-shadow
-    } catch (error) {
+    } catch (deleteError) {
       // Show error as alert message instead of setting error state
       setAlertMessage('Failed to delete release version');
-      logger.error('Failed to delete release version:', error);
+      logger.error('Failed to delete release version:', deleteError);
     } finally {
       setConfirmDeleteId(null);
     }
@@ -308,9 +306,8 @@ const AppComponent: React.FunctionComponent = () => {
         setReleaseNotesText(md);
       }
       setShowReleaseNotesDialog(true);
-    // eslint-disable-next-line no-catch-shadow,no-shadow
-    } catch (error) {
-      logger.error('Failed to generate release notes:', error);
+    } catch (notesError) {
+      logger.error('Failed to generate release notes:', notesError);
       setAlertMessage('Failed to generate release notes');
     }
   }, [config.manualIssueManagement]);

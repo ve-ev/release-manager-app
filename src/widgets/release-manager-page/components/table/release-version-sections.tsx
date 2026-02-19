@@ -1,8 +1,8 @@
 import React from 'react';
-import {OverdueWarning} from './sections/overdue-warning';
-import {FreezeNotice} from './sections/freeze-notice';
+import {OverdueWarning} from './sections';
+import {FreezeNotice} from './sections';
 import {ReleasePerformedNotice} from './sections/release-performed-notice';
-import {VersionInfo} from './sections/version-info';
+import {VersionInfo} from './sections';
 import {PlannedIssuesList} from './linked-issues/linked-issues-list';
 import {isExpired} from '../../utils/date-utils';
 import type {AppSettings, ReleaseVersion} from '../../interfaces';
@@ -56,7 +56,7 @@ export const ExpandableContent: React.FC<ExpandableContentProps & {
   statusesLoaded: boolean;
   setIssueStatus: (id: string, status: import('../../hooks/useIssueStatuses').IssueStatus) => void;
   setTestStatus: (id: string, status: import('../../hooks/useIssueStatuses').TestStatus) => void;
-  // eslint-disable-next-line complexity
+// eslint-disable-next-line complexity
 }> = ({
   isAnyContentSectionShowing,
   showOverdueStatus,

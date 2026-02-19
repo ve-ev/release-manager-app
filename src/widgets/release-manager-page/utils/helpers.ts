@@ -96,7 +96,7 @@ export async function fetchIssuesBatch(
         issueId?: string;
       }>;
     }
-    
+
     // If request fails, return not found for all
     return issueIds.map(id => ({ found: false, issueId: id }));
   } catch {

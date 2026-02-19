@@ -4,12 +4,12 @@
  * This module provides the backend functionality for the Release Manager application.
  * It includes utilities for managing release versions and HTTP endpoints for CRUD operations.
  */
-/* eslint-disable vars-on-top, func-names, complexity */
-
 // External dependencies
-// Using import-like comment to satisfy ESLint while maintaining compatibility
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const entities = require("@jetbrains/youtrack-scripting-api/entities.js");
+const utils = require('./backend-utils');
+
+const logError = utils.logError;
+const resolveFieldNameCaseInsensitive = utils.resolveFieldNameCaseInsensitive;
 
 /**
  * HTTP status codes used throughout the application
@@ -22,16 +22,94 @@ const HTTP_STATUS = {
     NOT_FOUND: 404
 };
 
+
 /**
- * Error logger utility function
- *
- * @param {string} message - Error context message
- * @param {Error|string} error - The error object or message
+ * Builds bulk batch results for multiple issues and field names.
+ * @param {string[]} issueIds
+ * @param {string[]} fieldNames
+ * @returns {Object}
  */
-function logError(message, error) {
-    // eslint-disable-next-line no-console
-    console.log(`${message}: ${error.message || error}`);
+function buildBulkBatchResults(issueIds, fieldNames) {
+    const results = {};
+    for (let i = 0; i < issueIds.length; i++) {
+        const issueId = issueIds[i];
+        const parent = entities.Issue.findById(issueId);
+        if (!parent) { results[issueId] = {items: [], usedField: null}; continue; }
+        const selectedActualName = resolveFieldNameCaseInsensitive(parent, fieldNames);
+        if (!selectedActualName) { results[issueId] = {items: [], usedField: null}; continue; }
+        const ids = collectIssueAndSubtaskIds(parent, issueId);
+        results[issueId] = { items: collectFieldValues(ids, selectedActualName), usedField: selectedActualName };
+    }
+    return results;
 }
+
+
+/**
+ * Collects field values for a list of issue IDs.
+ * @param {string[]} ids
+ * @param {string|null} fieldName
+ * @returns {Array<{id: string, value: string|null}>}
+ */
+function collectFieldValues(ids, fieldName) {
+    const items = [];
+    for (let i = 0; i < ids.length; i++) {
+        const it = entities.Issue.findById(ids[i]);
+        items.push({id: ids[i], value: fieldName ? readFieldStringValue(it, fieldName) : null});
+    }
+    return items;
+}
+
+
+/**
+ * Sets error response with appropriate status code and message
+ *
+ * @param {Object} ctx - The context object
+ * @param {number} statusCode - HTTP status code
+ * @param {string|Object} errorMessage - Error message or object
+ */
+/**
+ * Collects parent issue ID and all subtask IDs.
+ * @param {Object} parent
+ * @param {string} parentId
+ * @returns {string[]}
+ */
+function collectIssueAndSubtaskIds(parent, parentId) {
+    const ids = [parentId];
+    parent.links['parent for'].forEach(function (subTask) {
+        ids.push(subTask.id);
+    });
+    return ids;
+}
+
+
+/**
+ * Parses a semicolon/comma-separated field name string into an ordered array.
+ * @param {string} fieldName
+ * @returns {string[]}
+ */
+function parseFieldNames(fieldName) {
+    const names = (fieldName || '')
+        .toString()
+        .split(/[;,]/)
+        .map(function (s) { return s.trim(); })
+        .filter(function (s) { return !!s; });
+    return names.length > 0 ? names : [fieldName];
+}
+
+
+function prepareCustomFieldData(issue, fieldName) {
+    if (!issue) { return null; }
+    const orderedNames = parseFieldNames(fieldName);
+    var selectedName = orderedNames[0] || fieldName;
+    var value = null;
+    var actualName = resolveFieldNameCaseInsensitive(issue, orderedNames);
+    if (actualName) {
+        selectedName = actualName;
+        value = readFieldStringValue(issue, actualName);
+    }
+    return { name: selectedName, value: value };
+}
+
 
 /**
  * Prepares issue data for API response
@@ -59,66 +137,20 @@ function prepareIssueData(issue) {
     };
 }
 
-function resolveFieldNameCaseInsensitive(issue, orderedNames) {
-    if (!issue || !issue.fields) {
-        return null;
-    }
-    // Build a map of lowercase field keys to actual keys
-    var keyMap = {};
-    for (var key in issue.fields) {
-        if (Object.prototype.hasOwnProperty.call(issue.fields, key)) {
-            keyMap[key.toLowerCase()] = key;
-        }
-    }
-    for (var i = 0; i < orderedNames.length; i++) {
-        var candidate = orderedNames[i];
-        var actual = keyMap[candidate.toLowerCase()];
-        if (actual) {
-            return actual;
-        }
-    }
-    return null;
-}
-
-function prepareCustomFieldData(issue, fieldName) {
-    if (!issue) {
-        return null;
-    }
-    // Support ordered list of field names (comma/semicolon separated). Pick the first existing.
-    const names = (fieldName || '')
-        .toString()
-        .split(/[;,]/)
-        .map(function (s) {
-            return s.trim();
-        })
-        .filter(function (s) {
-            return !!s;
-        });
-    const orderedNames = names.length > 0 ? names : [fieldName];
-
-    var selectedName = orderedNames.length > 0 ? orderedNames[0] : fieldName;
-    var value = null;
-    if (issue && issue.fields) {
-        var actualName = resolveFieldNameCaseInsensitive(issue, orderedNames);
-        if (actualName) {
-            selectedName = actualName;
-            var fld = issue.fields[actualName];
-            value = (fld && typeof fld.name === 'string') ? fld.name : null;
-        }
-    }
-    return {
-        name: selectedName,
-        value: value
-    };
-}
 
 /**
- * Sets error response with appropriate status code and message
- *
- * @param {Object} ctx - The context object
- * @param {number} statusCode - HTTP status code
- * @param {string|Object} errorMessage - Error message or object
+ * Reads a field's string value from an issue.
+ * @param {Object} issue
+ * @param {string} fieldName
+ * @returns {string|null}
  */
+function readFieldStringValue(issue, fieldName) {
+    if (!issue || !issue.fields) { return null; }
+    var fld = issue.fields[fieldName];
+    return (fld && typeof fld.name === 'string') ? fld.name : null;
+}
+
+
 function sendErrorResponse(ctx, statusCode, errorMessage) {
     ctx.response.code = statusCode;
 
@@ -132,6 +164,7 @@ function sendErrorResponse(ctx, statusCode, errorMessage) {
 /**
  * HTTP endpoints handler
  */
+
 exports.httpHandler = {
     endpoints: [
         /**
@@ -239,30 +272,11 @@ exports.httpHandler = {
                 try {
                     const issueId = ctx.request.getParameter('issueId');
                     const fieldName = ctx.request.getParameter('fieldName');
-                    if (!issueId) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue ID is required');
-                        return;
-                    }
-                    if (!fieldName) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field name is required');
-                        return;
-                    }
+                    if (!issueId) { sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue ID is required'); return; }
+                    if (!fieldName) { sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field name is required'); return; }
                     const issue = entities.Issue.findById(issueId);
-                    if (!issue) {
-                        sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Issue not found');
-                        return;
-                    }
-                    const names = (fieldName || '')
-                        .toString()
-                        .split(/[;,]/)
-                        .map(function (s) {
-                            return s.trim();
-                        })
-                        .filter(function (s) {
-                            return !!s;
-                        });
-                    const orderedNames = names.length > 0 ? names : [fieldName];
-                    const actual = resolveFieldNameCaseInsensitive(issue, orderedNames);
+                    if (!issue) { sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Issue not found'); return; }
+                    const actual = resolveFieldNameCaseInsensitive(issue, parseFieldNames(fieldName));
                     ctx.response.json({exists: !!actual, resolvedName: actual});
                 } catch (error) {
                     logError('Failed to check issue field existence', error);
@@ -278,57 +292,16 @@ exports.httpHandler = {
                 try {
                     const issueId = ctx.request.getParameter('issueId');
                     const fieldName = ctx.request.getParameter('fieldName');
-                    if (!issueId) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue ID is required');
-                        return;
-                    }
-                    if (!fieldName) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field name is required');
-                        return;
-                    }
+                    if (!issueId) { sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue ID is required'); return; }
+                    if (!fieldName) { sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field name is required'); return; }
                     const parent = entities.Issue.findById(issueId);
-                    if (!parent) {
-                        sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Issue not found');
-                        return;
-                    }
-                    // collect ids: parent first, then all subtasks
-                    const ids = [issueId];
-                    parent.links['parent for'].forEach(function (subTask) {
-                        ids.push(subTask.id);
-                    });
-
-                    // Support multiple field names in order (comma/semicolon separated)
-                    const names = (fieldName || '')
-                        .toString()
-                        .split(/[;,]/)
-                        .map(function (s) {
-                            return s.trim();
-                        })
-                        .filter(function (s) {
-                            return !!s;
-                        });
-                    const orderedNames = names.length > 0 ? names : [fieldName];
-
-                    // First resolve actual field name on parent (case-insensitive). If not exists, skip fetching per-issue values
-                    const selectedActualName = resolveFieldNameCaseInsensitive(parent, orderedNames);
-
-                    const items = [];
-                    for (let i = 0; i < ids.length; i++) {
-                        const id = ids[i];
-                        const it = entities.Issue.findById(id);
-                        let value = null;
-                        if (selectedActualName && it && it.fields) {
-                            const fld = it.fields[selectedActualName];
-                            if (fld) {
-                                value = (typeof fld.name === 'string') ? fld.name : null;
-                            }
-                        }
-                        items.push({id: id, value: value});
-                    }
+                    if (!parent) { sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Issue not found'); return; }
+                    const ids = collectIssueAndSubtaskIds(parent, issueId);
+                    const selectedActualName = resolveFieldNameCaseInsensitive(parent, parseFieldNames(fieldName));
                     ctx.response.json({
                         parentIssueId: issueId,
                         fieldName: selectedActualName || fieldName,
-                        items: items
+                        items: collectFieldValues(ids, selectedActualName)
                     });
                 } catch (error) {
                     logError('Failed to get issue field bulk', error);
@@ -340,68 +313,19 @@ exports.httpHandler = {
             method: 'POST',
             path: 'issue-field-bulk-batch',
             permissions: ['READ_ISSUE'],
+            // eslint-disable-next-line complexity
             handle: function handle(ctx) {
                 try {
                     const payload = ctx.request.json();
                     const issueIds = payload.issueIds || [];
                     const fieldNames = payload.fieldNames || [];
-
                     if (!Array.isArray(issueIds) || issueIds.length === 0) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue IDs array is required');
-                        return;
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue IDs array is required'); return;
                     }
                     if (!Array.isArray(fieldNames) || fieldNames.length === 0) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field names array is required');
-                        return;
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field names array is required'); return;
                     }
-
-                    // Result structure: { issueId: { items: [...], usedField: string } }
-                    const results = {};
-
-                    for (let i = 0; i < issueIds.length; i++) {
-                        const issueId = issueIds[i];
-                        const parent = entities.Issue.findById(issueId);
-
-                        if (!parent) {
-                            results[issueId] = {items: [], usedField: null};
-                            continue;
-                        }
-
-                        // Resolve which field name exists on this issue
-                        const selectedActualName = resolveFieldNameCaseInsensitive(parent, fieldNames);
-
-                        if (!selectedActualName) {
-                            results[issueId] = {items: [], usedField: null};
-                            continue;
-                        }
-
-                        // Collect ids: parent first, then all subtasks
-                        const ids = [issueId];
-                        parent.links['parent for'].forEach(function (subTask) {
-                            ids.push(subTask.id);
-                        });
-
-                        const items = [];
-                        for (let j = 0; j < ids.length; j++) {
-                            const id = ids[j];
-                            const it = entities.Issue.findById(id);
-                            let value = null;
-                            if (it && it.fields) {
-                                const fld = it.fields[selectedActualName];
-                                if (fld) {
-                                    value = (typeof fld.name === 'string') ? fld.name : null;
-                                }
-                            }
-                            items.push({id: id, value: value});
-                        }
-
-                        results[issueId] = {
-                            items: items,
-                            usedField: selectedActualName
-                        };
-                    }
-
-                    ctx.response.json(results);
+                    ctx.response.json(buildBulkBatchResults(issueIds, fieldNames));
                 } catch (error) {
                     logError('Failed to get issue field bulk batch', error);
                     sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);

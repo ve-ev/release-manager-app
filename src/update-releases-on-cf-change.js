@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
 const entities = require('@jetbrains/youtrack-scripting-api/entities');
 const api = require('./backend.js');
 const {message} = require("@jetbrains/youtrack-scripting-api/workflow.js");
@@ -23,8 +22,7 @@ function parseAppSettings(ctx) {
         if (typeof appSettings === 'string') {
             appSettings = JSON.parse(appSettings);
         }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (e) {
+    } catch {
         appSettings = {};
     }
     return appSettings;
@@ -42,6 +40,7 @@ function getPlannedReleaseFieldName(ctx) {
 
 exports.rule = entities.Issue.onChange({
     title: 'Update Releases on Custom Field Change',
+    // eslint-disable-next-line complexity
     guard: (ctx) => {
         if (!isCustomFieldsMappingEnabled(ctx)) {
             return false;
@@ -95,7 +94,6 @@ exports.rule = entities.Issue.onChange({
             newValues.push(issueField.name);
         }
 
-        // eslint-disable-next-line no-console
         console.log('[ReleaseManager][Workflow] Planned release field changed for issue', ctx.issue.id, 'new value =', newValues || '<empty>');
 
         try {
@@ -106,7 +104,6 @@ exports.rule = entities.Issue.onChange({
                 'Update releases triggered due to the "' + projectField.name + '" custom field change'
             );
         } catch (e) {
-            // eslint-disable-next-line no-console
             console.log('Failed to update releases on custom field change: ' + (e && e.message ? e.message : e));
         }
     },

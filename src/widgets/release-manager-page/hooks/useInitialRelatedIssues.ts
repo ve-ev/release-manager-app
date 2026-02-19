@@ -30,23 +30,23 @@ export function useInitialRelatedIssues(
       if (!initialRelatedIssueIds || initialRelatedIssueIds.length === 0) {
         return;
       }
-      
+
       setIsLoading(true);
-      
+
       // Batch fetch all issues in ONE request instead of sequential calls
       const results = await fetchIssuesBatch(host, initialRelatedIssueIds);
       const found: IssueData[] = [];
-      
+
       results.forEach(res => {
         if (res.found && res.issue) {
           found.push(res.issue);
         }
       });
-      
+
       setRelatedIssues(found);
       setIsLoading(false);
     };
-    
+
     loadIssues();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount, not when initialRelatedIssueIds changes

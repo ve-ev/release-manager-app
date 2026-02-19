@@ -60,5 +60,14 @@ export default tseslint.config(
         ...globals.node,
       },
     },
+
+    rules: {
+      "no-console": "off",
+      "@typescript-eslint/no-require-imports": "off",
+      "func-names": "off",
+      "func-style": "off",
+      "vars-on-top": "off",
+      "no-nested-ternary": "off",
+    },
   },
 );

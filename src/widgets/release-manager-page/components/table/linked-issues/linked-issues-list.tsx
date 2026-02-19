@@ -64,7 +64,7 @@ const PlannedIssuesListComponent: React.FC<PlannedIssuesListProps> = ({
     });
     return map;
   }, [isFrozen, snapshot]);
-  
+
   // Memoize empty progressSettings to prevent unnecessary re-renders
   const effectiveProgressSettings = React.useMemo(() => progressSettings || {
     customFieldNames: [],

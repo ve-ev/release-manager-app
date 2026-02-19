@@ -14,7 +14,7 @@ export interface ReleaseNotesOptions {
  * - List of planned issues with ID and Summary
  * - If manual issue management is enabled, excludes issues with status Discoped
  */
-/* eslint-disable complexity */
+// eslint-disable-next-line complexity
 export function generateReleaseNotesMarkdown(rv: ReleaseVersion, opts?: ReleaseNotesOptions): string {
   const lines: string[] = [];
   const headerTitle = [rv.product, rv.version].filter(Boolean).join(' ');
