@@ -48,7 +48,6 @@
 }
 
 .settings-field label {
-  font-weight: 500;
   margin-bottom: 4px;
 }
 
@@ -59,6 +58,7 @@
 
 .bold-label {
   display: block;
+  font-weight: 500;
   margin-bottom: 4px;
 }
 

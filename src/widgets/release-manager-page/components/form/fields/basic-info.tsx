@@ -85,8 +85,8 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
       .filter(v => {
         if (!includeArchived && v.isArchived) { return false; }
         if (!includeReleased && v.isReleased) { return false; }
-        if (usedVersionNames.has(v.name)) { return false; }
-        return true;
+        return !usedVersionNames.has(v.name);
+
       })
       .map(v => ({
         key: v.name,

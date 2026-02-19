@@ -67,6 +67,7 @@ const AppComponent: React.FunctionComponent = () => {
   const [showForm, setShowForm] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showImportForm, setShowImportForm] = useState(false);
+  const [importFieldName, setImportFieldName] = useState<string | undefined>(undefined);
   const [currentReleaseVersion, setCurrentReleaseVersion] = useState<ReleaseVersion | undefined>(undefined);
   const [initialShowMetaIssueForm, setInitialShowMetaIssueForm] = useState<boolean>(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
@@ -533,8 +534,9 @@ const AppComponent: React.FunctionComponent = () => {
         <div className="form-container">
           <SettingsForm
             onClose={() => setShowSettings(false)}
-            onOpenImport={() => {
+            onOpenImport={(fieldName) => {
               setShowSettings(false);
+              setImportFieldName(fieldName);
               setShowImportForm(true);
             }}
           />
@@ -544,7 +546,7 @@ const AppComponent: React.FunctionComponent = () => {
       {showImportForm && permissions.canAccessSettings && (
         <div className="form-container">
           <ImportVersions
-            fieldName={settings.customFieldMapping?.plannedReleaseField}
+            fieldName={importFieldName ?? settings.customFieldMapping?.plannedReleaseField}
             onClose={() => {
               setShowImportForm(false);
               fetchReleaseVersions();
