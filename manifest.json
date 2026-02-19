@@ -3,8 +3,8 @@
   "title": "Release Manager",
   "description": "Plan, track, and communicate product releases with version management, progress tracking, and release notes generation.",
   "$schema": "https://json.schemastore.org/youtrack-app.json",
-  "version": "1.1.3",
-  "changeNotes": "<h3>Version 1.1.3</h3>\n<ul>\n  <li><b>Change:</b> Renamed Product entity to Tag</li>\n  <li><b>Feature:</b> Added Audit Event Log</li>\n  <li><b>Feature:</b> Progress snapshot for releases + freeze updates/changes when a release is in Released state</li>\n  <li><b>Fix:</b> Improved table layouting and added fixed width columns</li>\n</ul>",
+  "version": "1.2.0",
+  "changeNotes": "<h3>Version 1.2.0</h3>\n<ul>\n  <li><b>Feature:</b> Allow using multi-select custom fields in mapping</li>\n  <li><b>Feature:</b> Import custom field values as releases into the app</li>\n</ul>",
   "vendor": {
     "name": "E.V",
     "url": "https://github.com/ve-ev/release-manager-app"
