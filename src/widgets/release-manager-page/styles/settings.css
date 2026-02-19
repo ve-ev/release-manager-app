@@ -52,6 +52,11 @@
   margin-bottom: 4px;
 }
 
+.import-versions label {
+  font-weight: normal;
+  margin-bottom: 0;
+}
+
 .bold-label {
   display: block;
   margin-bottom: 4px;
