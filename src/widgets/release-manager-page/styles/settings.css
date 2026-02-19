@@ -48,21 +48,32 @@
 }
 
 .settings-field label {
+  margin-bottom: 4px;
+}
+
+.import-versions label {
+  font-weight: normal;
+  margin-bottom: 0;
+}
+
+.bold-label {
   display: block;
   font-weight: 500;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .settings-field .field-help {
   font-size: 12px;
   color: var(--ring-secondary-color);
   margin-top: 4px;
+  margin-bottom: 4px;
 }
 
 .zone-values {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 8px;
   margin-bottom: 8px;
 }
 

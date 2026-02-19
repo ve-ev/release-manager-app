@@ -10,6 +10,8 @@
 // YouTrack workflow entities API
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const entities = require('@jetbrains/youtrack-scripting-api/entities');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const search = require('@jetbrains/youtrack-scripting-api/search');
 
 /**
  * HTTP status codes used throughout the application
@@ -928,7 +930,7 @@ function setIssuePlannedMembership(ctx, issueId, targetReleases, issueSummary) {
     if (targetReleases) {
         targets = Array.isArray(targetReleases) ? targetReleases : [targetReleases];
     }
-    var targetIds = targets.map(function (r) { return r.id; });
+    const targetIds = targets.map(function (r) { return r.id; });
 
     const releaseVersions = getReleaseVersions(ctx);
 
@@ -1004,18 +1006,23 @@ function updateReleasesForIssue(ctx, issue, values) {
     if (!issueId) { return; }
 
     // Normalize to array of trimmed non-empty strings
-    var rawValues = Array.isArray(values) ? values : (values ? [values] : []);
-    var trimmedValues = [];
-    for (var vi = 0; vi < rawValues.length; vi++) {
-        var v = typeof rawValues[vi] === 'string' ? rawValues[vi].trim() : '';
-        if (v) { trimmedValues.push(v); }
+    let rawValues;
+    if (Array.isArray(values)) {
+        rawValues = values;
+    } else {
+        rawValues = values ? [values] : [];
+    }
+    const trimmedValues = [];
+    for (let vi = 0; vi < rawValues.length; vi++) {
+        const val = typeof rawValues[vi] === 'string' ? rawValues[vi].trim() : '';
+        if (val) { trimmedValues.push(val); }
     }
 
     // Find matching releases for each value
-    var matchedReleases = [];
-    var unmatchedValues = [];
-    for (var ti = 0; ti < trimmedValues.length; ti++) {
-        var release = findReleaseByVersion(ctx, trimmedValues[ti]);
+    const matchedReleases = [];
+    const unmatchedValues = [];
+    for (let ti = 0; ti < trimmedValues.length; ti++) {
+        const release = findReleaseByVersion(ctx, trimmedValues[ti]);
         if (release) {
             matchedReleases.push(release);
         } else {
@@ -1545,8 +1552,12 @@ exports.httpHandler = {
                     }
 
                     if (action === 'remove' && !isMultiValue) {
-                        // For single-value field, clearing means setting to null
-                        issue.fields[field.name] = null;
+                        // For single-value field, only clear if the current value matches
+                        const currentVal = issue.fields[field.name];
+                        const currentName = (currentVal && typeof currentVal.name === 'string') ? currentVal.name : null;
+                        if (currentName === payload.value) {
+                            issue.fields[field.name] = null;
+                        }
                         ctx.response.json({ success: true });
                         return;
                     }
@@ -1581,14 +1592,139 @@ exports.httpHandler = {
                             // Fallback: set as single value
                             issue.fields[field.name] = existingValue;
                         }
+                    } else if (action === 'add' && !isMultiValue) {
+                        // For single-value or initially-empty multi-value field: just set the value
+                        issue.fields[field.name] = existingValue;
                     } else {
-                        // 'set' action or 'add' on single-value field: replace the value
+                        // 'set' action: replace the value
                         issue.fields[field.name] = existingValue;
                     }
 
                     ctx.response.json({ success: true });
                 } catch (error) {
                     logError('Failed to set custom field', error);
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
+                }
+            }
+        },
+        /**
+         * GET /version-field-values - Retrieve values from a version-type custom field
+         * Returns the bundle values with their name, releaseDate, released, and archived flags.
+         */
+        {
+            method: 'GET',
+            path: 'version-field-values',
+            scope: 'project',
+            handle: function handle(ctx) {
+                try {
+                    const fieldName = ctx.request.getParameter('fieldName');
+                    if (!fieldName) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'fieldName parameter is required');
+                        return;
+                    }
+                    const field = ctx.project.findFieldByName(fieldName);
+                    if (!field) {
+                        sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Field not found: ' + fieldName);
+                        return;
+                    }
+                    const values = [];
+                    field.values.forEach(function (v) {
+                        values.push({
+                            name: v.name || '',
+                            releaseDate: v.releaseDate ? new Date(v.releaseDate).toISOString().split('T')[0] : null,
+                            isReleased: !!v.isReleased,
+                            isArchived: !!v.isArchived
+                        });
+                    });
+                    ctx.response.json({ fieldName: fieldName, values: values });
+                } catch (error) {
+                    logError('Failed to get version field values', error);
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
+                }
+            }
+        },
+        /**
+         * POST /import-versions - Import version field values as releases and link matching issues
+         * Body: { fieldName: string, versions: Array<{ name, releaseDate, isReleased }> }
+         */
+        {
+            method: 'POST',
+            path: 'import-versions',
+            scope: 'project',
+            handle: function handle(ctx) {
+                try {
+                    const payload = ctx.request.json();
+                    const fieldName = payload.fieldName;
+                    const versions = payload.versions;
+                    if (!fieldName || !Array.isArray(versions) || versions.length === 0) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'fieldName and non-empty versions array are required');
+                        return;
+                    }
+
+                    const existingReleases = getReleaseVersions(ctx);
+                    const existingVersionNames = {};
+                    for (let e = 0; e < existingReleases.length; e++) {
+                        existingVersionNames[existingReleases[e].version] = true;
+                    }
+
+                    const imported = [];
+                    const skipped = [];
+
+                    for (let i = 0; i < versions.length; i++) {
+                        const v = versions[i];
+                        if (!v.name) { continue; }
+                        // Skip if a release with this version name already exists
+                        if (existingVersionNames[v.name]) {
+                            skipped.push(v.name);
+                            continue;
+                        }
+
+                        const status = v.isReleased ? 'Released' : 'Planning';
+                        const releaseDate = v.releaseDate || new Date().toISOString().split('T')[0];
+
+                        const newRelease = {
+                            id: Date.now().toString() + '-' + i,
+                            version: v.name,
+                            releaseDate: releaseDate,
+                            status: status,
+                            linkedIssues: [],
+                            plannedIssues: []
+                        };
+
+                        // Search for issues that have this version value in the specified field
+                        try {
+                            const query = fieldName + ': {' + v.name + '}';
+                            const foundIssues = search.search(ctx.project, query, ctx.currentUser);
+                            if (foundIssues && foundIssues.isNotEmpty && foundIssues.isNotEmpty()) {
+                                foundIssues.forEach((issue) => {
+                                    newRelease.plannedIssues.push({
+                                        id: issue.id,
+                                        summary: issue.summary || ''
+                                    });
+                                });
+                            }
+                        } catch (searchErr) {
+                            // eslint-disable-next-line no-console
+                            console.log('[ReleaseManager][Import] Search failed for version ' + v.name + ': ' + (searchErr.message || searchErr));
+                        }
+
+                        existingReleases.push(newRelease);
+                        existingVersionNames[v.name] = true;
+                        imported.push(v.name);
+                    }
+
+                    if (imported.length > 0) {
+                        saveReleaseVersions(ctx, existingReleases);
+                    }
+
+                    ctx.response.json({
+                        imported: imported,
+                        skipped: skipped,
+                        totalImported: imported.length,
+                        totalSkipped: skipped.length
+                    });
+                } catch (error) {
+                    logError('Failed to import versions', error);
                     sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
                 }
             }

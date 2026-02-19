@@ -46,6 +46,11 @@ export function useSettingsData(api: API): UseSettingsDataReturn {
     };
     
     fetchSettings();
+
+    // Re-fetch settings when they are updated elsewhere (e.g. after saving SettingsForm)
+    const handleSettingsUpdated = () => { fetchSettings(); };
+    window.addEventListener('settings-updated', handleSettingsUpdated);
+    return () => { window.removeEventListener('settings-updated', handleSettingsUpdated); };
   }, [api]);
 
   return { settings, setSettings, isLoading, error };

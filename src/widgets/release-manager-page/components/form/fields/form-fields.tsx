@@ -1,7 +1,6 @@
 import React from 'react';
 import {Grid} from '@jetbrains/ring-ui-built/components/grid/grid';
-import {ReleaseVersion} from '../../../interfaces';
-import {PlannedOrMetaIssue} from '../../../interfaces';
+import {ReleaseVersion, PlannedOrMetaIssue} from '../../../interfaces';
 import BasicInfo from './basic-info.tsx';
 import Description from './description.tsx';
 import PlannedIssues from '../planned-issues.tsx';
@@ -23,6 +22,7 @@ interface FormFieldsProps {
   plannedIssuesExtraAction?: React.ReactNode;
   plannedIssuesReplacement?: React.ReactNode;
   onEditMetaIssue?: (issue: PlannedOrMetaIssue, index: number) => void;
+  existingReleaseVersions?: ReleaseVersion[];
 }
 
 const FormFields: React.FC<FormFieldsProps> = (props) => (
@@ -33,6 +33,7 @@ const FormFields: React.FC<FormFieldsProps> = (props) => (
       handleDateChange={props.handleDateChange}
       versionError={props.versionError}
       releaseDateError={props.releaseDateError}
+      existingReleaseVersions={props.existingReleaseVersions}
     />
 
     <Description

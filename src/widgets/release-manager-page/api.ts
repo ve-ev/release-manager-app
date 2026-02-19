@@ -247,4 +247,17 @@ export class API {
       body: { issueId, fieldName, value, action: action || 'set' }
     });
   }
+
+  async getVersionFieldValues(fieldName: string): Promise<{ fieldName: string; values: Array<{ name: string; releaseDate: string | null; isReleased: boolean; isArchived: boolean }> }> {
+    return this.fetchJson<{ fieldName: string; values: Array<{ name: string; releaseDate: string | null; isReleased: boolean; isArchived: boolean }> }>(
+      `backend/version-field-values?fieldName=${encodeURIComponent(fieldName)}`
+    );
+  }
+
+  async importVersions(fieldName: string, versions: Array<{ name: string; releaseDate: string | null; isReleased: boolean }>): Promise<{ imported: string[]; skipped: string[]; totalImported: number; totalSkipped: number }> {
+    return this.fetchJson<{ imported: string[]; skipped: string[]; totalImported: number; totalSkipped: number }>('backend/import-versions', {
+      method: 'POST',
+      body: { fieldName, versions }
+    });
+  }
 }

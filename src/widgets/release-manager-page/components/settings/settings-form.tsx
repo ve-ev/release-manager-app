@@ -18,12 +18,13 @@ import {TagsSettings} from './tags-settings.tsx';
  */
 interface AppSettingsFormProps {
   onClose: () => void;
+  onOpenImport?: (fieldName: string) => void;
 }
 
 /**
  * Component for configuring progress tracking settings
  */
-export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
+export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose, onOpenImport }) => {
   // Use custom hook to fetch and manage settings data
   const { settings, setSettings, isLoading, error: loadError } = useSettingsData(api);
   // Load app-level config to conditionally render sections
@@ -168,6 +169,33 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
                   <div className="settings-separator" role="separator" aria-orientation="vertical"/>
                   <div className="settings-column right">
                     <CustomFieldMapping settings={settings} setSettings={setSettings}/>
+                    {settings.customFieldMapping?.plannedReleaseField && (
+                      <>
+                        <div className="settings-separator horizontal" role="separator" aria-orientation="horizontal"/>
+                        <div className="settings-field">
+                          <Button
+                            onClick={async () => {
+                              try {
+                                await api.fetchJson('backend/app-settings', {
+                                  method: 'PUT',
+                                  body: settings
+                                });
+                                api.invalidateProgressSettingsCache();
+                                invalidateProgressCache();
+                                await api.getAppSettings();
+                                window.dispatchEvent(new CustomEvent('settings-updated'));
+                              } catch { /* proceed even if save fails */ }
+                              onOpenImport?.(settings.customFieldMapping?.plannedReleaseField || '');
+                            }}
+                          >
+                            Import Release Versions from Custom Field Values
+                          </Button>
+                          <div className="field-help" style={{marginTop: '4px'}}>
+                            Create release versions based on existing values from the configured custom field.
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </>
               )}

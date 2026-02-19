@@ -21,6 +21,7 @@ interface ReleaseVersionFormProps {
   onCancel: () => void;
   metaIssuesEnabled?: boolean;
   initialShowMetaIssueForm?: boolean;
+  existingReleaseVersions?: ReleaseVersion[];
 }
 
 // Import CSS classes
@@ -52,7 +53,7 @@ const styles = {
 // All form field components have been moved to separate files in the components directory
 
 // eslint-disable-next-line complexity
-const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, onSave, onCancel, metaIssuesEnabled, initialShowMetaIssueForm}) => {
+const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, onSave, onCancel, metaIssuesEnabled, initialShowMetaIssueForm, existingReleaseVersions}) => {
   // Initialize form state
   const [formData, setFormData] = useState<ReleaseVersion>({
     id: '',  // Empty id for new release versions
@@ -119,10 +120,10 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
   // Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const {name, value} = e.target;
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       [name]: value
-    });
+    }));
 
     // Clear field-specific errors when user makes changes
     if (name === 'version') {
@@ -142,10 +143,10 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
 
   // Handle date changes
   const handleDateChange = (name: string) => (date: Date | null | undefined) => {
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       [name]: date ? date.toISOString().split('T')[0] : ''
-    });
+    }));
 
     // Clear field-specific errors when user makes changes
     if (name === 'releaseDate') {
@@ -343,6 +344,7 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
             <Button onClick={handleAddMetaIssue}>Add Meta Issue</Button>
           ) : undefined}
           onEditMetaIssue={handleEditMetaIssueClick}
+          existingReleaseVersions={existingReleaseVersions}
         />
 
         <Panel className={styles.formPanel}>
