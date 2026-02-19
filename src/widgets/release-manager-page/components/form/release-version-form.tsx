@@ -21,6 +21,7 @@ interface ReleaseVersionFormProps {
   onCancel: () => void;
   metaIssuesEnabled?: boolean;
   initialShowMetaIssueForm?: boolean;
+  existingReleaseVersions?: ReleaseVersion[];
 }
 
 // Import CSS classes
@@ -52,7 +53,7 @@ const styles = {
 // All form field components have been moved to separate files in the components directory
 
 // eslint-disable-next-line complexity
-const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, onSave, onCancel, metaIssuesEnabled, initialShowMetaIssueForm}) => {
+const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, onSave, onCancel, metaIssuesEnabled, initialShowMetaIssueForm, existingReleaseVersions}) => {
   // Initialize form state
   const [formData, setFormData] = useState<ReleaseVersion>({
     id: '',  // Empty id for new release versions
@@ -343,6 +344,7 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
             <Button onClick={handleAddMetaIssue}>Add Meta Issue</Button>
           ) : undefined}
           onEditMetaIssue={handleEditMetaIssueClick}
+          existingReleaseVersions={existingReleaseVersions}
         />
 
         <Panel className={styles.formPanel}>

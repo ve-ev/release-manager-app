@@ -18,12 +18,13 @@ import {TagsSettings} from './tags-settings.tsx';
  */
 interface AppSettingsFormProps {
   onClose: () => void;
+  onOpenImport?: () => void;
 }
 
 /**
  * Component for configuring progress tracking settings
  */
-export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
+export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose, onOpenImport }) => {
   // Use custom hook to fetch and manage settings data
   const { settings, setSettings, isLoading, error: loadError } = useSettingsData(api);
   // Load app-level config to conditionally render sections
@@ -168,6 +169,17 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose }) => {
                   <div className="settings-separator" role="separator" aria-orientation="vertical"/>
                   <div className="settings-column right">
                     <CustomFieldMapping settings={settings} setSettings={setSettings}/>
+                    {settings.customFieldMapping?.plannedReleaseField && (
+                      <>
+                        <div className="settings-separator horizontal" role="separator" aria-orientation="horizontal"/>
+                        <div className="settings-field">
+                          <Button onClick={onOpenImport}>Import Versions from Field</Button>
+                          <div className="field-help" style={{marginTop: '4px'}}>
+                            Import existing version values from the custom field as releases.
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </>
               )}

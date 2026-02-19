@@ -8,6 +8,7 @@ import settingsIcon from '@jetbrains/icons/settings';
 import ReleaseVersionForm from './components/form/release-version-form.tsx';
 import {ReleaseVersion} from './interfaces';
 import SettingsForm from './components/settings/settings-form.tsx';
+import {ImportVersions} from './components/settings/import-versions';
 import {VersionTable} from './components/table/version-table.tsx';
 import ReleaseNotesDialog from './components/release-notes-dialog.tsx';
 import AddIssueDialog from './components/add-issue-dialog.tsx';
@@ -65,6 +66,7 @@ const AppComponent: React.FunctionComponent = () => {
   // Local UI state
   const [showForm, setShowForm] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showImportForm, setShowImportForm] = useState(false);
   const [currentReleaseVersion, setCurrentReleaseVersion] = useState<ReleaseVersion | undefined>(undefined);
   const [initialShowMetaIssueForm, setInitialShowMetaIssueForm] = useState<boolean>(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
@@ -474,7 +476,7 @@ const AppComponent: React.FunctionComponent = () => {
       </div>
 
       {/* Keep content mounted but hide it when form(s) are open to avoid unmount/remount cycle */}
-      <div style={{ display: (showForm || showSettings) ? 'none' : 'block' }}>
+      <div style={{ display: (showForm || showSettings || showImportForm) ? 'none' : 'block' }}>
         {renderContent}
       </div>
 
@@ -486,6 +488,7 @@ const AppComponent: React.FunctionComponent = () => {
             onCancel={handleCancelForm}
             metaIssuesEnabled={config.metaIssuesEnabled}
             initialShowMetaIssueForm={initialShowMetaIssueForm}
+            existingReleaseVersions={releaseVersions}
           />
         </div>
       )}
@@ -530,6 +533,22 @@ const AppComponent: React.FunctionComponent = () => {
         <div className="form-container">
           <SettingsForm
             onClose={() => setShowSettings(false)}
+            onOpenImport={() => {
+              setShowSettings(false);
+              setShowImportForm(true);
+            }}
+          />
+        </div>
+      )}
+
+      {showImportForm && permissions.canAccessSettings && (
+        <div className="form-container">
+          <ImportVersions
+            settings={settings}
+            onClose={() => {
+              setShowImportForm(false);
+              fetchReleaseVersions();
+            }}
           />
         </div>
       )}

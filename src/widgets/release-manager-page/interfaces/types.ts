@@ -22,6 +22,9 @@ export interface AppSettings {
   // Custom Field Mapping feature config
   customFieldMapping?: {
     plannedReleaseField?: string; // name or ID
+    includeArchivedVersions?: boolean;
+    includeReleasedVersions?: boolean;
+    useExistingFieldValues?: boolean;
   }
 }
 
