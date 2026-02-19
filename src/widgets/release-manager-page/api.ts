@@ -241,10 +241,10 @@ export class API {
     });
   }
 
-  async setIssueCustomField(issueId: string, fieldName: string, value: string): Promise<{ success: boolean; resolvedName?: string }>{
+  async setIssueCustomField(issueId: string, fieldName: string, value: string, action?: 'set' | 'add' | 'remove'): Promise<{ success: boolean; resolvedName?: string }>{
     return this.fetchJson<{ success: boolean; resolvedName?: string }>('backend/custom-field-set', {
       method: 'POST',
-      body: { issueId, fieldName, value }
+      body: { issueId, fieldName, value, action: action || 'set' }
     });
   }
 }

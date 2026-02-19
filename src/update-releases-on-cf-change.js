@@ -50,7 +50,7 @@ exports.rule = entities.Issue.onChange({
         // Skip processing when the change was initiated by the Release Manager app
         // We use an Issue extension property (updatedByReleaseManager) to mark
         // such updates in the backend custom-field-set handler.
-        if (ctx.issue && ctx.issue.extensionProperties && ctx.issue.extensionProperties.updatedByReleaseManager) {
+        if (ctx.issue?.extensionProperties?.updatedByReleaseManager) {
             // Clear the marker so that subsequent manual changes are processed normally
             ctx.issue.extensionProperties.updatedByReleaseManager = false;
             return false;
@@ -58,11 +58,15 @@ exports.rule = entities.Issue.onChange({
 
         const fieldName = getPlannedReleaseFieldName(ctx);
         if (!fieldName) {
-            throw new Error('Custom field mapping is not configured');
+            message(
+                '⚠️ Release Manager Notification </br>Custom field mapping is not configured! </br>' +
+                'Please configure this in the settings within the app or disable this feature.'
+            );
+            return false;
         }
 
         const field = ctx.issue.project.findFieldByName(fieldName);
-        return ctx.issue.isChanged(field) && ctx.issue.isReported;
+        return field && ctx.issue.isChanged(field.name) && ctx.issue.isReported;
     },
     // eslint-disable-next-line complexity
     action: (ctx) => {
@@ -75,22 +79,32 @@ exports.rule = entities.Issue.onChange({
             return;
         }
 
-        const field = ctx.issue.project.findFieldByName(fieldName);
-        if (!field) {
+        const projectField = ctx.issue.project.findFieldByName(fieldName);
+        if (!projectField) {
             return;
         }
 
-        // Read new value (string) or null when cleared
-        const fldVal = ctx.issue.fields[field.name];
-        const newValue = fldVal && typeof fldVal.name === 'string' ? fldVal.name : null;
+        // Read new value(s) — supports both single and multi-value custom fields
+        const issueField = ctx.issue.fields[projectField.name];
+        let newValues = [];
+        if (issueField && typeof issueField.forEach === 'function') {
+            // Multi-value field (Set-like): iterate to collect all values
+            issueField.forEach(v => { if (v && v.name) { newValues.push(v.name); } });
+        } else if (issueField && typeof issueField.name === 'string') {
+            // Single-value field
+            newValues.push(issueField.name);
+        }
 
         // eslint-disable-next-line no-console
-        console.log('[ReleaseManager][Workflow] Planned release field changed for issue', ctx.issue.id, 'new value =', newValue || '<empty>');
+        console.log('[ReleaseManager][Workflow] Planned release field changed for issue', ctx.issue.id, 'new value =', newValues || '<empty>');
 
         try {
             // Update releases: remove from all if null, otherwise add to selected and remove from others
-            api.updateReleasesForIssueByVersion(ctx, ctx.issue, newValue);
-            message("Release Manager App: Update releases triggered due to the '" + field.name + "' custom field change");
+            api.updateReleasesForIssueByVersion(ctx, ctx.issue, newValues);
+            message(
+                '🔄 Release Manager Notification</br> ' +
+                'Update releases triggered due to the "' + projectField.name + '" custom field change'
+            );
         } catch (e) {
             // eslint-disable-next-line no-console
             console.log('Failed to update releases on custom field change: ' + (e && e.message ? e.message : e));
