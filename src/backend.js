@@ -909,24 +909,30 @@ function updateReleaseById(ctx, id, updatedReleaseVersion) {
 }
 
 /**
- * Ensures that an issue belongs to at most one release in the plannedIssues list.
- * This is used by workflow-based mapping from a single plannedRelease custom
- * field to the Release Manager app data model.
+ * Ensures that an issue belongs to exactly the specified set of target releases
+ * in the plannedIssues lists. Supports both single and multi-value custom fields.
  *
  * Behaviour:
- *  - when targetRelease is null/undefined, the issue is removed from all releases.plannedIssues
- *  - otherwise the issue is added to targetRelease.plannedIssues and removed from
- *    all other releases.plannedIssues
+ *  - when targetReleases is null/undefined/empty, the issue is removed from all releases.plannedIssues
+ *  - otherwise the issue is added to each target release's plannedIssues and removed from
+ *    all other releases' plannedIssues
  *
  * @param {Object} ctx
  * @param {string} issueId
- * @param {Object|null} targetRelease release object returned by findReleaseByVersion or null
+ * @param {Array<Object>|Object|null} targetReleases release object(s) returned by findReleaseByVersion or null
  * @param {string} [issueSummary]
  */
-function setIssueSinglePlannedMembership(ctx, issueId, targetRelease, issueSummary) {
+function setIssuePlannedMembership(ctx, issueId, targetReleases, issueSummary) {
+    // Normalize to array
+    var targets = [];
+    if (targetReleases) {
+        targets = Array.isArray(targetReleases) ? targetReleases : [targetReleases];
+    }
+    var targetIds = targets.map(function (r) { return r.id; });
+
     const releaseVersions = getReleaseVersions(ctx);
 
-    if (!targetRelease) {
+    if (targets.length === 0) {
         // Remove from plannedIssues of all releases
         let changed = false;
         const removedFrom = [];
@@ -948,23 +954,24 @@ function setIssueSinglePlannedMembership(ctx, issueId, targetRelease, issueSumma
     }
 
     let changed = false;
+    const addedTo = [];
     const removedFrom = [];
-    const targetId = targetRelease.id;
 
     for (let i = 0; i < releaseVersions.length; i++) {
         const rv = releaseVersions[i];
         const before = Array.isArray(rv.plannedIssues) ? rv.plannedIssues : [];
 
-        if (rv.id === targetId) {
-            // Ensure issue is present in the target release plannedIssues
+        if (targetIds.indexOf(rv.id) !== -1) {
+            // Ensure issue is present in this target release's plannedIssues
             if (!before.some(function (it) { return it && it.id === issueId; })) {
                 const list = before.slice();
                 list.push({ id: issueId, summary: issueSummary || '' });
                 rv.plannedIssues = list;
                 changed = true;
+                addedTo.push(rv.version || rv.id);
             }
         } else {
-            // Remove from other releases plannedIssues
+            // Remove from non-target releases' plannedIssues
             const after = before.filter(function (it) { return it && it.id !== issueId; });
             if (after.length !== before.length) {
                 rv.plannedIssues = after;
@@ -977,36 +984,59 @@ function setIssueSinglePlannedMembership(ctx, issueId, targetRelease, issueSumma
     if (changed) {
         saveReleaseVersions(ctx, releaseVersions);
         // eslint-disable-next-line no-console
-        console.log('[ReleaseManager][Backend] Issue', issueId, 'linked to planned release', targetRelease.version,
+        console.log('[ReleaseManager][Backend] Issue', issueId, 'linked to planned releases', addedTo.join(', ') || '<none>',
             'and removed from planned releases', removedFrom.join(', ') || '<none>');
     }
 }
 
 /**
- * Adds/Removes issue membership in releases based on version value.
- * If versionValue is null/empty or release with such version is not found, the issue is removed from all releases.
+ * Adds/Removes issue membership in releases based on version values.
+ * Accepts a single string or an array of strings.
+ * If values is null/empty or no matching releases are found, the issue is removed from all releases.
  * Intended to be safely callable both from HTTP handlers and workflow rules.
  *
  * @param {Object} ctx
  * @param {Object|string} issue - YouTrack issue entity or minimal object with id/summary or just issue id
- * @param {string|null} versionValue
+ * @param {Array<string>|string|null} values - version value(s) to match against releases
  */
-function updateReleasesForIssueByVersion(ctx, issue, versionValue) {
+function updateReleasesForIssue(ctx, issue, values) {
     const issueId = typeof issue === 'string' ? issue : issue && issue.id;
     if (!issueId) { return; }
 
-    const trimmedValue = typeof versionValue === 'string' ? versionValue.trim() : null;
-    const release = trimmedValue ? findReleaseByVersion(ctx, trimmedValue) : null;
+    // Normalize to array of trimmed non-empty strings
+    var rawValues = Array.isArray(values) ? values : (values ? [values] : []);
+    var trimmedValues = [];
+    for (var vi = 0; vi < rawValues.length; vi++) {
+        var v = typeof rawValues[vi] === 'string' ? rawValues[vi].trim() : '';
+        if (v) { trimmedValues.push(v); }
+    }
 
-    if (!release) {
+    // Find matching releases for each value
+    var matchedReleases = [];
+    var unmatchedValues = [];
+    for (var ti = 0; ti < trimmedValues.length; ti++) {
+        var release = findReleaseByVersion(ctx, trimmedValues[ti]);
+        if (release) {
+            matchedReleases.push(release);
+        } else {
+            unmatchedValues.push(trimmedValues[ti]);
+        }
+    }
+
+    if (unmatchedValues.length > 0) {
         // eslint-disable-next-line no-console
-        console.log('[ReleaseManager][Backend] No matching release found for value', trimmedValue || '<empty>', '— issue', issueId, 'removed from all planned releases');
-        setIssueSinglePlannedMembership(ctx, issueId, null);
+        console.log('[ReleaseManager][Backend] No matching releases found for values', unmatchedValues.join(', '), '— issue', issueId);
+    }
+
+    if (matchedReleases.length === 0) {
+        // eslint-disable-next-line no-console
+        console.log('[ReleaseManager][Backend] No matching releases found — issue', issueId, 'removed from all planned releases');
+        setIssuePlannedMembership(ctx, issueId, null);
         return;
     }
 
     const issueSummary = (issue && typeof issue === 'object' && issue.summary) || '';
-    setIssueSinglePlannedMembership(ctx, issueId, release, issueSummary);
+    setIssuePlannedMembership(ctx, issueId, matchedReleases, issueSummary);
 }
 
 /**
@@ -1488,23 +1518,74 @@ exports.httpHandler = {
                         return;
                     }
 
-                    // Handle empty value (clear field)
-                    if (!payload.value || payload.value === '') {
+                    // Determine if the field is multi-value by checking if the current value is a Set-like collection
+                    const currentFieldValue = issue.fields[field.name];
+                    const isMultiValue = currentFieldValue && typeof currentFieldValue.forEach === 'function' && typeof currentFieldValue.add === 'function';
+                    // action: 'set' (default), 'add', 'remove'
+                    const action = payload.action || 'set';
+
+                    // Handle empty value (clear field) — only for 'set' action
+                    if (action === 'set' && (!payload.value || payload.value === '')) {
                         issue.fields[field.name] = null;
                         ctx.response.json({ success: true });
                         return;
                     }
 
-                    // Check if value already exists in field's allowed values
-                    const existingValue = field.findValueByName(payload.value);
-
-                    if (!existingValue) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Custom field value does not exist. Please create it first.');
+                    if (action === 'remove' && isMultiValue) {
+                        // Remove a specific value from a multi-value field using Set's delete method
+                        const currentValues = issue.fields[field.name];
+                        if (currentValues) {
+                            const valueToRemove = field.findValueByName(payload.value);
+                            if (valueToRemove && typeof currentValues.delete === 'function') {
+                                currentValues.delete(valueToRemove);
+                            }
+                        }
+                        ctx.response.json({ success: true });
                         return;
                     }
 
-                    // Set the field value on the issue
-                    issue.fields[field.name] = existingValue;
+                    if (action === 'remove' && !isMultiValue) {
+                        // For single-value field, clearing means setting to null
+                        issue.fields[field.name] = null;
+                        ctx.response.json({ success: true });
+                        return;
+                    }
+
+                    // For 'set' and 'add' actions, we need a valid value
+                    if (!payload.value || payload.value === '') {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Value is required for this action');
+                        return;
+                    }
+
+                    // Check if value already exists in field's allowed values; create if missing
+                    let existingValue = field.findValueByName(payload.value);
+
+                    if (!existingValue) {
+                        try {
+                            existingValue = field.createValue(payload.value);
+                            // eslint-disable-next-line no-console
+                            console.log('[ReleaseManager][Backend] Created new bundle value', payload.value, 'for field', payload.fieldName);
+                        } catch (createErr) {
+                            logError('Failed to create custom field value', createErr);
+                            sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Custom field value does not exist and could not be created: ' + (createErr.message || createErr));
+                            return;
+                        }
+                    }
+
+                    if (action === 'add' && isMultiValue) {
+                        // Add value to the current set using Set's add method
+                        const currentValues = issue.fields[field.name];
+                        if (currentValues && typeof currentValues.add === 'function') {
+                            currentValues.add(existingValue);
+                        } else {
+                            // Fallback: set as single value
+                            issue.fields[field.name] = existingValue;
+                        }
+                    } else {
+                        // 'set' action or 'add' on single-value field: replace the value
+                        issue.fields[field.name] = existingValue;
+                    }
+
                     ctx.response.json({ success: true });
                 } catch (error) {
                     logError('Failed to set custom field', error);
@@ -1517,7 +1598,7 @@ exports.httpHandler = {
 
 // Expose selected helpers for workflows and other modules
 exports.updateReleaseById = updateReleaseById;
-exports.updateReleasesForIssueByVersion = updateReleasesForIssueByVersion;
+exports.updateReleasesForIssueByVersion = updateReleasesForIssue;
 exports.addIssueToRelease = addIssueToRelease;
 exports.removeIssueFromOtherReleases = removeIssueFromOtherReleases;
 exports.getAppSettings = getAppSettings;

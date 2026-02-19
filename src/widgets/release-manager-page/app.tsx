@@ -95,8 +95,8 @@ const AppComponent: React.FunctionComponent = () => {
   const pendingCustomFieldUpdates = useRef<Set<string>>(new Set());
 
   // Helper function to update custom field with deduplication
-  const updateIssueCustomField = useCallback(async (issueId: string, fieldName: string, value: string) => {
-    const key = `${issueId}:${fieldName}`;
+  const updateIssueCustomField = useCallback(async (issueId: string, fieldName: string, value: string, action?: 'set' | 'add' | 'remove') => {
+    const key = `${issueId}:${fieldName}:${action || 'set'}:${value}`;
 
     // Skip if already in progress
     if (pendingCustomFieldUpdates.current.has(key)) {
@@ -108,7 +108,7 @@ const AppComponent: React.FunctionComponent = () => {
     pendingCustomFieldUpdates.current.add(key);
 
     try {
-      await api.setIssueCustomField(issueId, fieldName, value);
+      await api.setIssueCustomField(issueId, fieldName, value, action);
     } catch (err) {
       logger.error('Failed to set custom field for issue', issueId, err);
     } finally {
@@ -132,19 +132,22 @@ const AppComponent: React.FunctionComponent = () => {
   }, []);
 
   // Helper function to handle custom field updates for added/removed issues
+  // For multi-value fields: uses 'add' to append and 'remove' to remove individual values
+  // For single-value fields: uses 'set' to replace and 'set' with empty to clear
   const handleCustomFieldUpdates = useCallback(async (
     newlyAdded: Array<{id: string}>,
     removed: Array<{id: string}>,
     releaseVersion: string,
     plannedReleaseField: string
   ) => {
-    // Use release version directly as the field value
+    // Use 'add' action for newly added issues (backend handles single vs multi)
     if (newlyAdded.length > 0) {
-      await Promise.all(newlyAdded.map(it => updateIssueCustomField(it.id, plannedReleaseField, releaseVersion)));
+      await Promise.all(newlyAdded.map(it => updateIssueCustomField(it.id, plannedReleaseField, releaseVersion, 'add')));
     }
 
+    // Use 'remove' action for removed issues (backend handles single vs multi)
     if (removed.length > 0) {
-      await Promise.all(removed.map(it => updateIssueCustomField(it.id, plannedReleaseField, '')));
+      await Promise.all(removed.map(it => updateIssueCustomField(it.id, plannedReleaseField, releaseVersion, 'remove')));
     }
   }, [updateIssueCustomField]);
 
