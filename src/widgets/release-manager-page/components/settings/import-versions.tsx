@@ -18,6 +18,7 @@ interface Props {
   onBackToSettings?: () => void;
 }
 
+// eslint-disable-next-line complexity
 export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSettings}) => {
   const [includeArchived, setIncludeArchived] = useState(false);
   const [includeReleased, setIncludeReleased] = useState(true);
@@ -48,6 +49,7 @@ export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSet
     return names;
   }, [existingReleases]);
 
+  // eslint-disable-next-line complexity
   const handleFetchVersions = useCallback(async () => {
     if (!fieldName) { return; }
     setIsLoading(true);
@@ -178,6 +180,7 @@ export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSet
         </Button>
         {versions.length > 0 && (
           <>
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
             <label style={{display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '8px'}}>
               <Checkbox
                 checked={includeArchived}
@@ -185,6 +188,7 @@ export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSet
               />
               Include archived versions
             </label>
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
             <label style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
               <Checkbox
                 checked={includeReleased}
@@ -227,7 +231,7 @@ export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSet
             {versions.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{padding: '24px 8px', textAlign: 'center', color: '#999'}}>
-                  Click "Fetch Versions" to load available versions
+                  Click &quot;Fetch Versions&quot; to load available versions
                 </td>
               </tr>
             ) : versions.map(v => {
@@ -235,18 +239,17 @@ export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSet
               const alreadyExists = existingVersionNames.has(v.name);
               const isImportable = included && !alreadyExists;
               const isSelected = selectedForImport.has(v.name);
-              let status = 'Excluded';
-              let opacity = 0.4;
-              if (alreadyExists) {
-                status = 'Already exists';
-                opacity = 0.6;
-              } else if (included && isSelected) {
-                status = 'Will import';
-                opacity = 1;
-              } else if (included) {
-                status = 'Skipped';
-                opacity = 0.7;
-              }
+              const OPACITY_EXISTS = 0.6;
+              const OPACITY_WILL_IMPORT = 1;
+              const OPACITY_SKIPPED = 0.7;
+              const OPACITY_EXCLUDED = 0.4;
+              const getStatusAndOpacity = () => {
+                if (alreadyExists) { return { status: 'Already exists', opacity: OPACITY_EXISTS }; }
+                if (included && isSelected) { return { status: 'Will import', opacity: OPACITY_WILL_IMPORT }; }
+                if (included) { return { status: 'Skipped', opacity: OPACITY_SKIPPED }; }
+                return { status: 'Excluded', opacity: OPACITY_EXCLUDED };
+              };
+              const { status, opacity } = getStatusAndOpacity();
               return (
                 <tr key={v.name} style={{borderBottom: '1px solid #f0f0f0', opacity}}>
                   <td style={{padding: '0 8px', width: '32px', textAlign: 'center', verticalAlign: 'middle'}}>

@@ -930,7 +930,7 @@ function setIssuePlannedMembership(ctx, issueId, targetReleases, issueSummary) {
     if (targetReleases) {
         targets = Array.isArray(targetReleases) ? targetReleases : [targetReleases];
     }
-    var targetIds = targets.map(function (r) { return r.id; });
+    const targetIds = targets.map(function (r) { return r.id; });
 
     const releaseVersions = getReleaseVersions(ctx);
 
@@ -1006,18 +1006,23 @@ function updateReleasesForIssue(ctx, issue, values) {
     if (!issueId) { return; }
 
     // Normalize to array of trimmed non-empty strings
-    var rawValues = Array.isArray(values) ? values : (values ? [values] : []);
-    var trimmedValues = [];
-    for (var vi = 0; vi < rawValues.length; vi++) {
-        var v = typeof rawValues[vi] === 'string' ? rawValues[vi].trim() : '';
-        if (v) { trimmedValues.push(v); }
+    let rawValues;
+    if (Array.isArray(values)) {
+        rawValues = values;
+    } else {
+        rawValues = values ? [values] : [];
+    }
+    const trimmedValues = [];
+    for (let vi = 0; vi < rawValues.length; vi++) {
+        const val = typeof rawValues[vi] === 'string' ? rawValues[vi].trim() : '';
+        if (val) { trimmedValues.push(val); }
     }
 
     // Find matching releases for each value
-    var matchedReleases = [];
-    var unmatchedValues = [];
-    for (var ti = 0; ti < trimmedValues.length; ti++) {
-        var release = findReleaseByVersion(ctx, trimmedValues[ti]);
+    const matchedReleases = [];
+    const unmatchedValues = [];
+    for (let ti = 0; ti < trimmedValues.length; ti++) {
+        const release = findReleaseByVersion(ctx, trimmedValues[ti]);
         if (release) {
             matchedReleases.push(release);
         } else {
@@ -1548,8 +1553,8 @@ exports.httpHandler = {
 
                     if (action === 'remove' && !isMultiValue) {
                         // For single-value field, only clear if the current value matches
-                        var currentVal = issue.fields[field.name];
-                        var currentName = (currentVal && typeof currentVal.name === 'string') ? currentVal.name : null;
+                        const currentVal = issue.fields[field.name];
+                        const currentName = (currentVal && typeof currentVal.name === 'string') ? currentVal.name : null;
                         if (currentName === payload.value) {
                             issue.fields[field.name] = null;
                         }
@@ -1612,17 +1617,17 @@ exports.httpHandler = {
             scope: 'project',
             handle: function handle(ctx) {
                 try {
-                    var fieldName = ctx.request.getParameter('fieldName');
+                    const fieldName = ctx.request.getParameter('fieldName');
                     if (!fieldName) {
                         sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'fieldName parameter is required');
                         return;
                     }
-                    var field = ctx.project.findFieldByName(fieldName);
+                    const field = ctx.project.findFieldByName(fieldName);
                     if (!field) {
                         sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Field not found: ' + fieldName);
                         return;
                     }
-                    var values = [];
+                    const values = [];
                     field.values.forEach(function (v) {
                         values.push({
                             name: v.name || '',
@@ -1648,25 +1653,25 @@ exports.httpHandler = {
             scope: 'project',
             handle: function handle(ctx) {
                 try {
-                    var payload = ctx.request.json();
-                    var fieldName = payload.fieldName;
-                    var versions = payload.versions;
+                    const payload = ctx.request.json();
+                    const fieldName = payload.fieldName;
+                    const versions = payload.versions;
                     if (!fieldName || !Array.isArray(versions) || versions.length === 0) {
                         sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'fieldName and non-empty versions array are required');
                         return;
                     }
 
-                    var existingReleases = getReleaseVersions(ctx);
-                    var existingVersionNames = {};
-                    for (var e = 0; e < existingReleases.length; e++) {
+                    const existingReleases = getReleaseVersions(ctx);
+                    const existingVersionNames = {};
+                    for (let e = 0; e < existingReleases.length; e++) {
                         existingVersionNames[existingReleases[e].version] = true;
                     }
 
-                    var imported = [];
-                    var skipped = [];
+                    const imported = [];
+                    const skipped = [];
 
-                    for (var i = 0; i < versions.length; i++) {
-                        var v = versions[i];
+                    for (let i = 0; i < versions.length; i++) {
+                        const v = versions[i];
                         if (!v.name) { continue; }
                         // Skip if a release with this version name already exists
                         if (existingVersionNames[v.name]) {
@@ -1674,10 +1679,10 @@ exports.httpHandler = {
                             continue;
                         }
 
-                        var status = v.isReleased ? 'Released' : 'Planning';
-                        var releaseDate = v.releaseDate || new Date().toISOString().split('T')[0];
+                        const status = v.isReleased ? 'Released' : 'Planning';
+                        const releaseDate = v.releaseDate || new Date().toISOString().split('T')[0];
 
-                        var newRelease = {
+                        const newRelease = {
                             id: Date.now().toString() + '-' + i,
                             version: v.name,
                             releaseDate: releaseDate,
@@ -1688,10 +1693,10 @@ exports.httpHandler = {
 
                         // Search for issues that have this version value in the specified field
                         try {
-                            var query = fieldName + ': {' + v.name + '}';
-                            var foundIssues = search.search(ctx.project, query, ctx.currentUser);
+                            const query = fieldName + ': {' + v.name + '}';
+                            const foundIssues = search.search(ctx.project, query, ctx.currentUser);
                             if (foundIssues && foundIssues.isNotEmpty && foundIssues.isNotEmpty()) {
-                                foundIssues.forEach(function (issue) {
+                                foundIssues.forEach((issue) => {
                                     newRelease.plannedIssues.push({
                                         id: issue.id,
                                         summary: issue.summary || ''

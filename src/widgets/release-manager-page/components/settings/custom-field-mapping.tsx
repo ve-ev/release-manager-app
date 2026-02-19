@@ -44,6 +44,7 @@ export const CustomFieldMapping: React.FC<Props> = ({ settings, setSettings }) =
       {mapping?.plannedReleaseField && (
         <>
           <div style={{marginTop: '20px', marginBottom: '12px'}}>
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
             <label style={{display: 'flex', height: '20px', gap: '4px'}}>
               <Checkbox
                 checked={!!mapping.useExistingFieldValues}
@@ -65,6 +66,7 @@ export const CustomFieldMapping: React.FC<Props> = ({ settings, setSettings }) =
           </div>
           {mapping.useExistingFieldValues && (
             <div style={{display: 'flex', gap: '10px', margin: '8px 0 12px 24px'}}>
+              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
               <label style={{display: 'flex', gap: '4px'}}>
                 <Checkbox
                   checked={!!mapping.includeArchivedVersions}
@@ -80,6 +82,7 @@ export const CustomFieldMapping: React.FC<Props> = ({ settings, setSettings }) =
                 />
                 Include archived versions
               </label>
+              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
               <label style={{display: 'flex', gap: '4px'}}>
                 <Checkbox
                   checked={mapping.includeReleasedVersions !== false}

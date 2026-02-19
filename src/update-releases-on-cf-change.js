@@ -42,6 +42,7 @@ function getPlannedReleaseFieldName(ctx) {
 
 exports.rule = entities.Issue.onChange({
     title: 'Update Releases on Custom Field Change',
+    // eslint-disable-next-line complexity
     guard: (ctx) => {
         if (!isCustomFieldsMappingEnabled(ctx)) {
             return false;

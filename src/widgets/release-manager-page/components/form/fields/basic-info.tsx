@@ -29,6 +29,7 @@ interface BasicInfoProps {
 
 type VersionMode = 'select' | 'input';
 
+// eslint-disable-next-line complexity
 const BasicInfo: React.FC<BasicInfoProps> = ({
   formData,
   handleInputChange,
@@ -52,7 +53,7 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
 
   // Fetch version field values when custom field mode is active
   useEffect(() => {
-    if (!isCustomFieldMode || !fieldName) { return; }
+    if (!isCustomFieldMode || !fieldName) { return undefined; }
     let cancelled = false;
     api.getVersionFieldValues(fieldName).then(response => {
       if (!cancelled) {

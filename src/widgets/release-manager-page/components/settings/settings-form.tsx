@@ -173,19 +173,23 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose, onOpenIm
                       <>
                         <div className="settings-separator horizontal" role="separator" aria-orientation="horizontal"/>
                         <div className="settings-field">
-                          <Button onClick={async () => {
-                            try {
-                              await api.fetchJson('backend/app-settings', {
-                                method: 'PUT',
-                                body: settings
-                              });
-                              api.invalidateProgressSettingsCache();
-                              invalidateProgressCache();
-                              await api.getAppSettings();
-                              window.dispatchEvent(new CustomEvent('settings-updated'));
-                            } catch { /* proceed even if save fails */ }
-                            onOpenImport?.(settings.customFieldMapping?.plannedReleaseField || '');
-                          }}>Import Release Versions from Custom Field Values</Button>
+                          <Button
+                            onClick={async () => {
+                              try {
+                                await api.fetchJson('backend/app-settings', {
+                                  method: 'PUT',
+                                  body: settings
+                                });
+                                api.invalidateProgressSettingsCache();
+                                invalidateProgressCache();
+                                await api.getAppSettings();
+                                window.dispatchEvent(new CustomEvent('settings-updated'));
+                              } catch { /* proceed even if save fails */ }
+                              onOpenImport?.(settings.customFieldMapping?.plannedReleaseField || '');
+                            }}
+                          >
+                            Import Release Versions from Custom Field Values
+                          </Button>
                           <div className="field-help" style={{marginTop: '4px'}}>
                             Create release versions based on existing values from the configured custom field.
                           </div>
