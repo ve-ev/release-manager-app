@@ -177,11 +177,6 @@ export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSet
           {isLoading ? 'Loading...' : 'Fetch Versions'}
         </Button>
         {versions.length > 0 && (
-          <Button primary onClick={handleImport} disabled={isImporting || selectedImportableVersions.length === 0}>
-            {isImporting ? 'Importing...' : `Import ${selectedImportableVersions.length} version${selectedImportableVersions.length !== 1 ? 's' : ''}`}
-          </Button>
-        )}
-        {versions.length > 0 && (
           <>
             <label style={{display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '8px'}}>
               <Checkbox
@@ -210,65 +205,69 @@ export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSet
         </div>
       )}
 
-      {versions.length > 0 && (
-        <div style={{maxHeight: '300px', overflow: 'auto', border: '1px solid #ddd', borderRadius: '4px', padding: '8px', margin: '12px 0'}}>
-          <table style={{width: '100%', fontSize: '13px', borderCollapse: 'collapse'}}>
-            <thead>
-              <tr style={{borderBottom: '1px solid #ddd', textAlign: 'center'}}>
-                <th style={{padding: '0 8px', width: '32px', verticalAlign: 'middle'}}>
-                  <Checkbox
-                    checked={importableVersions.length > 0 && importableVersions.every(v => selectedForImport.has(v.name))}
-                    indeterminate={importableVersions.some(v => selectedForImport.has(v.name)) && !importableVersions.every(v => selectedForImport.has(v.name))}
-                    onChange={toggleAllImportable}
-                  />
-                </th>
-                <th style={{padding: '8px'}}>Version</th>
-                <th style={{padding: '8px'}}>Release Date</th>
-                <th style={{padding: '8px'}}>Released</th>
-                <th style={{padding: '8px'}}>Archived</th>
-                <th style={{padding: '8px', width: '120px', whiteSpace: 'nowrap'}}>Status</th>
+      <div style={{maxHeight: '300px', overflow: 'auto', border: '1px solid #ddd', borderRadius: '4px', padding: '8px', margin: '12px 0'}}>
+        <table style={{width: '100%', fontSize: '13px', borderCollapse: 'collapse'}}>
+          <thead>
+            <tr style={{borderBottom: '1px solid #ddd', textAlign: 'center'}}>
+              <th style={{padding: '0 8px', width: '32px', verticalAlign: 'middle'}}>
+                <Checkbox
+                  checked={importableVersions.length > 0 && importableVersions.every(v => selectedForImport.has(v.name))}
+                  indeterminate={importableVersions.some(v => selectedForImport.has(v.name)) && !importableVersions.every(v => selectedForImport.has(v.name))}
+                  onChange={toggleAllImportable}
+                />
+              </th>
+              <th style={{padding: '8px'}}>Version</th>
+              <th style={{padding: '8px'}}>Release Date</th>
+              <th style={{padding: '8px'}}>Released</th>
+              <th style={{padding: '8px'}}>Archived</th>
+              <th style={{padding: '8px', width: '120px', whiteSpace: 'nowrap'}}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {versions.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{padding: '24px 8px', textAlign: 'center', color: '#999'}}>
+                  Click "Fetch Versions" to load available versions
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {versions.map(v => {
-                const included = filteredVersions.some(fv => fv.name === v.name);
-                const alreadyExists = existingVersionNames.has(v.name);
-                const isImportable = included && !alreadyExists;
-                const isSelected = selectedForImport.has(v.name);
-                let status = 'Excluded';
-                let opacity = 0.4;
-                if (alreadyExists) {
-                  status = 'Already exists';
-                  opacity = 0.6;
-                } else if (included && isSelected) {
-                  status = 'Will import';
-                  opacity = 1;
-                } else if (included) {
-                  status = 'Skipped';
-                  opacity = 0.7;
-                }
-                return (
-                  <tr key={v.name} style={{borderBottom: '1px solid #f0f0f0', opacity}}>
-                    <td style={{padding: '0 8px', width: '32px', textAlign: 'center', verticalAlign: 'middle'}}>
-                      {isImportable ? (
-                        <Checkbox
-                          checked={isSelected}
-                          onChange={() => toggleVersionSelection(v.name)}
-                        />
-                      ) : null}
-                    </td>
-                    <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.name}</td>
-                    <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.releaseDate || '—'}</td>
-                    <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.isReleased ? '✓' : ''}</td>
-                    <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.isArchived ? '✓' : ''}</td>
-                    <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle', width: '120px', whiteSpace: 'nowrap', color: alreadyExists ? '#2196F3' : undefined}}>{status}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ) : versions.map(v => {
+              const included = filteredVersions.some(fv => fv.name === v.name);
+              const alreadyExists = existingVersionNames.has(v.name);
+              const isImportable = included && !alreadyExists;
+              const isSelected = selectedForImport.has(v.name);
+              let status = 'Excluded';
+              let opacity = 0.4;
+              if (alreadyExists) {
+                status = 'Already exists';
+                opacity = 0.6;
+              } else if (included && isSelected) {
+                status = 'Will import';
+                opacity = 1;
+              } else if (included) {
+                status = 'Skipped';
+                opacity = 0.7;
+              }
+              return (
+                <tr key={v.name} style={{borderBottom: '1px solid #f0f0f0', opacity}}>
+                  <td style={{padding: '0 8px', width: '32px', textAlign: 'center', verticalAlign: 'middle'}}>
+                    {isImportable ? (
+                      <Checkbox
+                        checked={isSelected}
+                        onChange={() => toggleVersionSelection(v.name)}
+                      />
+                    ) : null}
+                  </td>
+                  <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.name}</td>
+                  <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.releaseDate || '—'}</td>
+                  <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.isReleased ? '✓' : ''}</td>
+                  <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.isArchived ? '✓' : ''}</td>
+                  <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle', width: '120px', whiteSpace: 'nowrap', color: alreadyExists ? '#2196F3' : undefined}}>{status}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {error && (
         <div style={{color: '#d32f2f', margin: '8px 0', fontSize: '13px'}}>{error}</div>
@@ -288,13 +287,24 @@ export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSet
         </div>
       )}
 
-      <div className="settings-actions">
-        {onBackToSettings && (
-          <Button onClick={onBackToSettings}>Back to Settings</Button>
-        )}
-        {onClose && (
-          <Button onClick={onClose}>Close</Button>
-        )}
+      <div className="settings-separator horizontal" role="separator" aria-orientation="horizontal"/>
+
+      <div className="settings-actions" style={{justifyContent: 'space-between'}}>
+        <div>
+          {onBackToSettings && (
+            <Button onClick={onBackToSettings}>Back to Settings</Button>
+          )}
+        </div>
+        <div style={{display: 'flex', gap: '8px'}}>
+          {versions.length > 0 && (
+            <Button primary onClick={handleImport} disabled={isImporting || selectedImportableVersions.length === 0}>
+              {isImporting ? 'Importing...' : `Import ${selectedImportableVersions.length} version${selectedImportableVersions.length !== 1 ? 's' : ''}`}
+            </Button>
+          )}
+          {onClose && (
+            <Button onClick={onClose}>Close</Button>
+          )}
+        </div>
       </div>
     </div>
   );

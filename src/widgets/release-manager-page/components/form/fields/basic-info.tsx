@@ -196,7 +196,9 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
             <Toggle
               checked={versionMode === 'input'}
               onChange={() => setVersionMode(versionMode === 'select' ? 'input' : 'select')}
-            >Add new</Toggle>
+            >
+              <div style={{opacity: 0.5, pointerEvents: 'none'}}>Add New Value</div>
+            </Toggle>
           </div>
           {versionError && (
             <div className={styles.errorMessage}>
