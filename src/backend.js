@@ -1692,7 +1692,7 @@ exports.httpHandler = {
                             var foundIssues = search.search(ctx.project, query, ctx.currentUser);
                             if (foundIssues && foundIssues.isNotEmpty && foundIssues.isNotEmpty()) {
                                 foundIssues.forEach(function (issue) {
-                                    newRelease.linkedIssues.push({
+                                    newRelease.plannedIssues.push({
                                         id: issue.id,
                                         summary: issue.summary || ''
                                     });
