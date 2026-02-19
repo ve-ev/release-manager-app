@@ -16,14 +16,14 @@ export const CustomFieldMapping: React.FC<Props> = ({ settings, setSettings }) =
     <div className="settings-field custom-field-mapping">
       <H3>Custom Field Mapping</H3>
       <div className="field-help">
-        Choose the custom field that stores the release version. Use the field name from your project.
+        Specify the custom field that stores the planned release version for issues.
       </div>
       <div className="field-help" style={{ marginTop: '8px', padding: '8px', backgroundColor: '#f0f8ff', borderLeft: '3px solid #2196F3' }}>
-        <strong>ℹ️ Workflow:</strong> When you change this field in an issue, the &#34;Update Releases on Custom Field Change&#34; workflow will sync the issue with the right release in this app. Make sure the workflow is enabled in your project.
+        <strong>ℹ️ Workflow:</strong> When this field is changed in an issue, the workflow will automatically sync the issue with the corresponding release. Ensure the workflow is enabled in your project.
       </div>
       <br/>
 
-      <label htmlFor="plannedReleaseField">Release Field</label>
+      <label className={'bold-label'} htmlFor="plannedReleaseField">Release Field</label>
       <Input
         id="plannedReleaseField"
         value={mapping?.plannedReleaseField || ''}
@@ -43,52 +43,58 @@ export const CustomFieldMapping: React.FC<Props> = ({ settings, setSettings }) =
 
       {mapping?.plannedReleaseField && (
         <>
-          <div style={{margin: '12px 0'}}>
-            <Checkbox
-              label="Use existing field values in version selector"
-              checked={!!mapping.useExistingFieldValues}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                setSettings(prev => ({
-                  ...prev,
-                  customFieldMapping: {
-                    ...prev.customFieldMapping,
-                    useExistingFieldValues: e.target.checked
-                  }
-                }));
-              }}
-            />
-            <div className="field-help" style={{marginLeft: '24px', marginTop: '4px'}}>
-              When enabled, the version field on the release form will show a dropdown with existing values from the custom field.
+          <div style={{marginTop: '20px', marginBottom: '12px'}}>
+            <label style={{display: 'flex', height: '20px', gap: '4px'}}>
+              <Checkbox
+                checked={!!mapping.useExistingFieldValues}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setSettings(prev => ({
+                    ...prev,
+                    customFieldMapping: {
+                      ...prev.customFieldMapping,
+                      useExistingFieldValues: e.target.checked
+                    }
+                  }));
+                }}
+              />
+              Use existing field values in the version selector
+            </label>
+            <div className="field-help" style={{marginLeft: '24px', marginTop: '1px'}}>
+              Show a dropdown with existing field values when creating a release version.
             </div>
           </div>
           {mapping.useExistingFieldValues && (
-            <div style={{display: 'flex', gap: '16px', margin: '12px 0', marginLeft: '24px'}}>
-              <Checkbox
-                label="Include archived versions"
-                checked={!!mapping.includeArchivedVersions}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  setSettings(prev => ({
-                    ...prev,
-                    customFieldMapping: {
-                      ...prev.customFieldMapping,
-                      includeArchivedVersions: e.target.checked
-                    }
-                  }));
-                }}
-              />
-              <Checkbox
-                label="Include released versions"
-                checked={mapping.includeReleasedVersions !== false}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  setSettings(prev => ({
-                    ...prev,
-                    customFieldMapping: {
-                      ...prev.customFieldMapping,
-                      includeReleasedVersions: e.target.checked
-                    }
-                  }));
-                }}
-              />
+            <div style={{display: 'flex', gap: '10px', margin: '8px 0 12px 24px'}}>
+              <label style={{display: 'flex', gap: '4px'}}>
+                <Checkbox
+                  checked={!!mapping.includeArchivedVersions}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    setSettings(prev => ({
+                      ...prev,
+                      customFieldMapping: {
+                        ...prev.customFieldMapping,
+                        includeArchivedVersions: e.target.checked
+                      }
+                    }));
+                  }}
+                />
+                Include archived versions
+              </label>
+              <label style={{display: 'flex', gap: '4px'}}>
+                <Checkbox
+                  checked={mapping.includeReleasedVersions !== false}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    setSettings(prev => ({
+                      ...prev,
+                      customFieldMapping: {
+                        ...prev.customFieldMapping,
+                        includeReleasedVersions: e.target.checked
+                      }
+                    }));
+                  }}
+                />
+                Include released versions
+              </label>
             </div>
           )}
         </>
@@ -96,5 +102,3 @@ export const CustomFieldMapping: React.FC<Props> = ({ settings, setSettings }) =
     </div>
   );
 };
-
-export default CustomFieldMapping;

@@ -120,10 +120,10 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
   // Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const {name, value} = e.target;
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       [name]: value
-    });
+    }));
 
     // Clear field-specific errors when user makes changes
     if (name === 'version') {
@@ -143,10 +143,10 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
 
   // Handle date changes
   const handleDateChange = (name: string) => (date: Date | null | undefined) => {
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       [name]: date ? date.toISOString().split('T')[0] : ''
-    });
+    }));
 
     // Clear field-specific errors when user makes changes
     if (name === 'releaseDate') {

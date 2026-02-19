@@ -89,7 +89,7 @@ export const ProgressTrackingSettings: React.FC<Props> = ({ settings, setSetting
       )}
 
       <div className="settings-field">
-        <label htmlFor="customFieldNames">Custom Field Name(s)</label>
+        <label className={'bold-label'} htmlFor="customFieldNames">Custom Field Name(s)</label>
         <Input
           id="customFieldNames"
           value={customFieldNamesInput}

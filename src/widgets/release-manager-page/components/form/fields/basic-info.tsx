@@ -4,6 +4,7 @@ import {Col, Row} from '@jetbrains/ring-ui-built/components/grid/grid';
 import DatePicker from '@jetbrains/ring-ui-built/components/date-picker/date-picker';
 import {Size} from '@jetbrains/ring-ui-built/components/input/input';
 import Select, {SelectItem} from '@jetbrains/ring-ui-built/components/select/select';
+import Toggle from '@jetbrains/ring-ui-built/components/toggle/toggle';
 import {ReleaseVersion} from '../../../interfaces';
 import {api} from '../../../app.tsx';
 import {useTagOptions, useAppConfig, useSettingsData} from '../../../hooks';
@@ -26,6 +27,8 @@ interface BasicInfoProps {
   existingReleaseVersions?: ReleaseVersion[];
 }
 
+type VersionMode = 'select' | 'input';
+
 const BasicInfo: React.FC<BasicInfoProps> = ({
   formData,
   handleInputChange,
@@ -45,6 +48,7 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
 
   // Version field options state
   const [versionOptions, setVersionOptions] = useState<Array<{name: string; releaseDate: string | null; isReleased: boolean; isArchived: boolean}>>([]);
+  const [versionMode, setVersionMode] = useState<VersionMode>('select');
 
   // Fetch version field values when custom field mode is active
   useEffect(() => {
@@ -141,7 +145,7 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
     }
   }, [handleInputChange]);
 
-  // Handle version selection from Select
+  // Handle version selection from Select — also auto-set release date if available
   const handleVersionSelect = useCallback((selected: SelectItem<{key: string, label: string}> | null) => {
     const syntheticEvent = {
       target: {
@@ -150,25 +154,18 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
       }
     } as React.ChangeEvent<HTMLInputElement>;
     handleInputChange(syntheticEvent);
-  }, [handleInputChange]);
 
-  // Handle adding a new custom version value
-  const handleVersionAdd = useCallback((value: string) => {
-    // Add the new value to local options so it appears in the dropdown
-    setVersionOptions(prev => {
-      if (prev.some(v => v.name === value)) { return prev; }
-      return [...prev, { name: value, releaseDate: null, isReleased: false, isArchived: false }];
-    });
-    const syntheticEvent = {
-      target: {
-        name: 'version',
-        value
+    // Auto-set release date from custom field value if present
+    if (selected) {
+      const match = versionOptions.find(v => v.name === selected.key);
+      if (match?.releaseDate) {
+        handleDateChange('releaseDate')(new Date(match.releaseDate));
       }
-    } as React.ChangeEvent<HTMLInputElement>;
-    handleInputChange(syntheticEvent);
-  }, [handleInputChange]);
+    }
+  }, [handleInputChange, handleDateChange, versionOptions]);
 
-  // Render version field: Select with allowAny when custom field mode, plain Input otherwise
+
+  // Render version field: Select or Input depending on mode when custom field mode, plain Input otherwise
   const renderVersionField = () => {
     if (isCustomFieldMode) {
       const selectedItem = formData.version
@@ -176,17 +173,31 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
         : null;
       return (
         <div>
-          <Select
-            selectedLabel="Version *"
-            data={versionSelectData}
-            selected={selectedItem}
-            onSelect={handleVersionSelect}
-            allowAny
-            add={{alwaysVisible: true, prefix: 'Add new: '}}
-            onAdd={handleVersionAdd}
-            filter
-            clear
-          />
+          <div className={styles.label}>Version *</div>
+          <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+            {versionMode === 'input' ? (
+              <div style={{flex: 1}}>
+                <Input
+                  name="version"
+                  value={formData.version}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+            ) : (
+              <div style={{flex: 1}}>
+                <Select
+                  data={versionSelectData}
+                  selected={selectedItem}
+                  onSelect={handleVersionSelect}
+                />
+              </div>
+            )}
+            <Toggle
+              checked={versionMode === 'input'}
+              onChange={() => setVersionMode(versionMode === 'select' ? 'input' : 'select')}
+            >Add new</Toggle>
+          </div>
           {versionError && (
             <div className={styles.errorMessage}>
               {versionError}

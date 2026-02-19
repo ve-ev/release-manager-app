@@ -455,7 +455,7 @@ const AppComponent: React.FunctionComponent = () => {
       <div className="header">
         {!showEmpty && <H1>Release Management</H1>}
         <div className="header-actions">
-          {!showForm && !showSettings && (
+          {!showForm && !showSettings && !showImportForm && (
             <>
               {permissions.canCreate && !showEmpty && (
                 <Button primary onClick={handleAddReleaseVersion}>Add Release Version</Button>
@@ -544,10 +544,14 @@ const AppComponent: React.FunctionComponent = () => {
       {showImportForm && permissions.canAccessSettings && (
         <div className="form-container">
           <ImportVersions
-            settings={settings}
+            fieldName={settings.customFieldMapping?.plannedReleaseField}
             onClose={() => {
               setShowImportForm(false);
               fetchReleaseVersions();
+            }}
+            onBackToSettings={() => {
+              setShowImportForm(false);
+              setShowSettings(true);
             }}
           />
         </div>

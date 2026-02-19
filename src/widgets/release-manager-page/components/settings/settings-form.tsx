@@ -173,9 +173,9 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose, onOpenIm
                       <>
                         <div className="settings-separator horizontal" role="separator" aria-orientation="horizontal"/>
                         <div className="settings-field">
-                          <Button onClick={onOpenImport}>Import Versions from Field</Button>
+                          <Button onClick={onOpenImport}>Import Release Versions from Custom Field Values</Button>
                           <div className="field-help" style={{marginTop: '4px'}}>
-                            Import existing version values from the custom field as releases.
+                            Create release versions based on existing values from the configured custom field.
                           </div>
                         </div>
                       </>
