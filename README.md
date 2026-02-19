@@ -1,137 +1,51 @@
 # Release Manager App
 
-A YouTrack project settings app for planning, tracking, and communicating releases. 
-It provides a single place to define "Release Versions" with dates, status, planned/meta issues, and tags; to visualize progress; and to generate release notes. 
-The app ships as a widget for PROJECT_SETTINGS and uses a lightweight backend to persist data in project extension properties.
+A [YouTrack](https://www.jetbrains.com/youtrack/) app for planning, tracking, and communicating product releases — right from your project settings.
+
+[![JetBrains Plugin](https://img.shields.io/badge/JetBrains_Marketplace-Release_Manager-blue)](https://plugins.jetbrains.com/plugin/28255-release-manager)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+## Features
+
+- **Release Versions** — Create and manage releases with version, status, dates, tags, and descriptions
+- **Progress Tracking** — Visualize release progress using configurable custom field value zones (green/yellow/red)
+- **Planned & Meta Issues** — Attach issues to releases; optionally group them under meta-issues
+- **Custom Field Mapping** — Keep releases in sync with a YouTrack custom field on issues
+- **Release Notes** — Generate Markdown release notes from release data and planned issues
+- **Filters & Sorting** — Filter by tag, version, or status; sort by any column
+- **Audit Log** — Track key changes to release versions (status transitions, freeze events, issue changes)
+- **Permissions** — Role-based access: full managers, light managers (edit-only), and viewers
 
 ## Getting Started
-1. In YouTrack, install or upload the app bundle.
-2. Open a project’s settings and set the “Release Manager” group.
-3. Open App > Settings, enter custom field names and value zones, and optionally define tags.
-4. Create your first release version, add planned issues or meta issues.
-5. Use filters and sorting to navigate; expand rows to review details and generate release notes.
 
-## Highlights
-- Plan releases per project with Release Versions (version, status, dates, tag) and details (description, additional info)
-- Track progress based on configurable custom fields and value zones (green/yellow/red)
-- Manage planned issues per release, with optional meta-issues aggregation
-- Inline status and test-status tracking for issues when manual issue management is enabled
-- Use the **Generic Add Issue Action** to quickly attach arbitrary issues to a release from the table
-- Keep releases in sync with your YouTrack project by enabling the **Custom Field Mapping** feature, which links a planned release custom field in issues with Release Versions in this app
-- Filters and sorting for quick navigation across releases
-- Audit Event Log for key release version changes (status, freeze/unfreeze, planned issues, description)
-- Visual indicators for feature freeze and release deadlines (today/overdue)
-- Freeze progress and issue/status updates when a release is in **Released** state (stores a snapshot to keep historical progress stable)
-- Generate Markdown release notes from the release definition and planned issues
-- Per-user expansion state remembered to keep context across sessions
+1. Install from the [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/28255-release-manager) or upload the app bundle manually in YouTrack.
+2. Open a project's **Settings → Apps → Release Manager**.
+3. Configure custom field names and value zones in **App Settings**.
+4. Create your first release version and start adding planned issues.
 
-## Feature Overview
+## Development
 
-1. Release Versions
-   - Fields: id, tag (stored in the `product` field for backward compatibility), version, description, additionalInfo, featureFreezeDate, releaseDate, status (Planning | In progress | Released | Overdue | Canceled), freezeConfirmed (flag), freezeTimestamp, plannedIssues, linkedIssues, metaIssues, snapshot, auditEvents.
-   - Validation (enforced server-side):
-     - version is required
-     - releaseDate is required
-     - featureFreezeDate must be before releaseDate when both provided
-     - status defaults to Planning if absent and must be one of the allowed values
-     - linkedIssues must be an array when present
-   - CRUD operations available depending on permissions.
+### Prerequisites
 
-2. Planned Issues and Meta Issues
-   - plannedIssues: list of issues referenced by id (with optional idReadable) and summary.
-   - meta issues (optional feature): a meta item that aggregates relatedIssueIds; the UI can open a meta-issue form for quick definition.
-   - Manual issue management mode (feature flag) unlocks tracking of issue status and test status with dedicated endpoints and safeguards (e.g., test status can only be set when issue status is Fixed or Merged).
+- Node.js
+- npm
+- [YouTrack Apps CLI](https://www.npmjs.com/package/@jetbrains/youtrack-apps-tools)
 
-3. Progress Tracking
-   - Configured via Settings per project: customFieldNames (ordered list of field names to probe, case-insensitive), and value zones:
-     - greenZoneValues (Completed), yellowZoneValues (In Progress), redZoneValues (Blocked).
-   - The app tries the first available custom field name across issues (parent/meta and subtasks) to derive per-issue values.
-   - A progress bar summarizes the current state (UI components and styles under components/table/progress and styles/progress-bar.css).
-   - Released-state snapshot:
-     - When a release transitions to **Released**, the backend captures a snapshot of progress + issue state used by the UI.
-     - While **Released**, the UI renders progress from the stored snapshot and disables updates that would change historical numbers.
+### Scripts
 
-4. Tags
-   - Optional list of tags configured in Settings, each with a color. Color can be edited or auto-generated deterministically based on tag name.
-   - When tags exist, the table shows a Tag column and a tag filter.
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start Vite dev server |
+| `npm run build` | Type-check, build, and validate the app bundle |
+| `npm run pack` | Package `dist/` into `release-manager-app.zip` |
+| `npm run upload` | Build and upload to YouTrack |
+| `npm run lint` | Run ESLint |
 
-5. Release Status and Date Indicators
-   - Derived display status can become Overdue when the release date has passed and status is not Released/Canceled.
-   - Indicators:
-     - Feature freeze indicator when featureFreezeDate is today and status is Planning/In progress.
-     - Release today indicator when releaseDate is today and status is not Released/Canceled/Overdue.
-   - Dates are highlighted when today/expired under the same conditions.
+## Links
 
-6. Filters and Sorting
-   - Filters: by tag (exact), version (substring), and status (exact).
-   - Sorting: by tag, version, progress (approx. by planned issue count), status (predefined order), featureFreezeDate, and releaseDate (default desc for dates, asc for others). Sorting is toggled via the header.
+- [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/28255-release-manager)
+- [GitHub Repository](https://github.com/ve-ev/release-manager-app)
 
-7. Permissions Model
-   - Derived from backend /permissions endpoint, based on groups configured in app settings:
-     - isManager: full access (settings, create, edit, delete)
-     - isLightManager: limited access (edit only)
-   - UI permissions:
-     - canAccessSettings: managers
-     - canCreate: managers
-     - canEdit: light managers or managers
-     - canDelete: managers
-     - canViewAudit: managers (audit events are stripped from release payloads for non-managers)
+## License
 
-8. UX Details
-   - Empty state page guiding first-time users to configure settings or create the first release.
-   - Row expansion reveals detailed sections (description, additional info, planned issues, overdue/freeze notices). Only one row can be expanded at a time.
-   - Expansion and info section toggles are coordinated to avoid jitter. The last expanded release id is stored per user.
-   - Auto-refresh: polling every 5 seconds reconciles the list with minimal re-renders.
-   - Inline success alerts for create/update/delete operations and confirmation dialogs for delete.
-
-9. Audit Event Log
-   - Release versions maintain an `auditEvents` array with key events (e.g., status transitions, freeze/unfreeze, planned issues changes, description changes).
-   - The UI exposes these events via a dialog; visibility is restricted to release managers.
-
-10. Release Notes
-   - Generate Markdown based on release data and planned issues. When manual issue management is enabled and issue statuses are available, Discoped issues are excluded.
-   - The dialog shows the generated Markdown for copy/paste or further processing.
-
-## Backend Endpoints
-Project-scoped (src/backend.js):
-- GET /backend/config → { manualIssueManagement, metaIssuesEnabled, customFieldsMapping }
-- GET /backend/permissions → { isManager, isLightManager }
-- GET /backend/app-settings → progress settings, tags (stored under `products` for backward compatibility), and customFieldMapping
-- PUT /backend/app-settings → update settings; requires at least one customFieldName in customFieldNames
-- GET /backend/releases → list of releases
-- GET /backend/release?id=… → single release
-- POST /backend/releases → create release (validates fields, assigns id; also creates a value in the mapped planned release custom field when custom field mapping is enabled)
-- PUT /backend/release?id=… → update release (validates, preserves id)
-- DELETE /backend/release?id=… → delete release
-- GET /backend/issue-statuses → { issueStatuses, testStatuses }
-- PUT /backend/issue-status → set issue status (Unresolved|Fixed|Merged|Discoped); resets test status unless Fixed/Merged
-- PUT /backend/issue-test-status → set test status (Tested|Not tested|Test NA); only meaningful when issue is Fixed/Merged
-- GET /backend/expanded-version → { expandedVersion }
-- PUT /backend/expanded-version → store per-user expanded version id
-- POST /backend/custom-field-set → set a single-valued custom field on an issue to the given value
-
-Global (src/backend-global.js):
-- GET /backend-global/issue?issueId=… → { id, summary, state, subtasks }
-- POST /backend-global/issues-batch → [{ found, issue } | { found: false, issueId }] for a list of issueIds
-- GET /backend-global/issue-field?issueId=…&fieldName=… → resolve field value (supports multiple candidate names, case-insensitive)
-- GET /backend-global/issue-field-exists?issueId=…&fieldName=… → { exists, resolvedName }
-- GET /backend-global/issue-field-bulk?issueId=…&fieldName=… → per-issue values for parent and subtasks using the resolved field name
-
-Data persistence:
-- Releases and settings are stored in project extensionProperties.
-- Issue statuses and test statuses stored in either project extensionProperties or settings (backward compatibility path).
-- Per-user expanded version stored in currentUser.extensionProperties.
-
-## Build, Run, and Deploy
-- Scripts (package.json):
-  - npm run dev → start Vite dev server
-  - npm run build → type-check (tsc -p tsconfig.app.json), build with Vite, validate YouTrack app bundle (youtrack-app validate dist)
-  - npm run pack → zip the dist folder into release-manager-app.zip
-  - npm run upload → build and upload the dist to YouTrack via youtrack-app CLI
-- Build config: vite.config.ts (root: src; output: dist; assets under widgets/* copied; manifest and public copied to dist)
-- Manifest: manifest.json declares the widget (key: releases) for the PROJECT_SETTINGS extension point; widget entry at widgets/release-manager-page/index.html; icon at widgets/release-manager-page/widget-icon.svg.
-
-## Known Behaviors and Edge Cases
-- Manual issue management mode affects release notes generation and enables status/test-status editing flows.
-- When multiple custom field names are set, the backend resolves the first existing name on the issue; name matching is case-insensitive.
-
+[MIT](LICENSE) © Evgenii Venediktov
