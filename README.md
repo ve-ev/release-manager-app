@@ -23,6 +23,72 @@ A [YouTrack](https://www.jetbrains.com/youtrack/) app for planning, tracking, an
 3. Configure custom field names and value zones in **App Settings**.
 4. Create your first release version and start adding planned issues.
 
+## Mental Model
+
+The app follows a three-layer architecture running inside the YouTrack platform:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        YouTrack Host                            │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  Frontend Widget  (React + TypeScript, Vite)              │  │
+│  │                                                           │  │
+│  │  app.tsx ─── hooks/ ─── components/                       │  │
+│  │    │          │           ├── table/     (version list,   │  │
+│  │    │          │           │               progress bars,  │  │
+│  │    │          │           │               linked issues)  │  │
+│  │    │          │           ├── form/      (create/edit     │  │
+│  │    │          │           │               release)        │  │
+│  │    │          │           ├── settings/  (field mapping,  │  │
+│  │    │          │           │               progress zones, │  │
+│  │    │          │           │               import)         │  │
+│  │    │          │           └── dialogs    (release notes,  │  │
+│  │    │          │                           audit log,      │  │
+│  │    │          │                           add issue)      │  │
+│  │    │          │                                           │  │
+│  │    │          ├── useReleaseVersions   (CRUD state)       │  │
+│  │    │          ├── useAppSettings       (config state)     │  │
+│  │    │          ├── useVersionProgress   (progress calc)    │  │
+│  │    │          └── usePermissions       (role checks)      │  │
+│  │    │                                                      │  │
+│  │    └──▶ api.ts  (API class — HTTP calls to backend)       │  │
+│  └────────────────────────┬──────────────────────────────────┘  │
+│                           │  HTTP (fetch)                       │
+│  ┌────────────────────────▼──────────────────────────────────┐  │
+│  │  Backend  (backend.js — YouTrack Scripting API)           │  │
+│  │                                                           │  │
+│  │  • REST endpoints: CRUD for release versions              │  │
+│  │  • Validation, audit events, freeze snapshots             │  │
+│  │  • Custom field sync (set field on issues)                │  │
+│  │  • Storage: project-level extensionProperties (JSON)      │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  Workflow  (update-releases-on-cf-change.js)              │  │
+│  │                                                           │  │
+│  │  Issue.onChange → detects custom field edits on issues    │  │
+│  │  and calls backend to add/remove the issue from releases  │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+- **Release Version** — the core entity stored as JSON in YouTrack project extension properties. Contains version name, status, dates, planned issues, freeze snapshots, and audit trail.
+- **Progress Zones** — issues linked to a release are categorized into green/yellow/red/grey zones based on a configurable custom field, powering the progress bar.
+- **Freeze & Snapshot** — when a release is frozen, the backend captures an immutable snapshot of all issue statuses for historical reference.
+- **Custom Field Mapping** — bidirectional sync: the workflow updates releases when an issue's custom field changes; the backend updates the issue's custom field when it is added/removed from a release.
+- **Permissions** — three roles: Manager (full access), Light Manager (edit-only), Viewer (read-only), resolved via the YouTrack permissions API.
+
+### Data Flow
+
+1. User interacts with the **widget UI** (create release, add issues, change settings)
+2. The **API class** sends HTTP requests to **backend.js** endpoints
+3. The **backend** validates, updates project extension properties (JSON storage), and optionally sets custom fields on issues
+4. The **workflow** listens for issue custom field changes and calls the backend to keep releases in sync
+5. Hooks re-fetch data and React re-renders the UI
+
 ## Development
 
 ### Prerequisites
