@@ -2,6 +2,7 @@ import React from 'react';
 import Input from '@jetbrains/ring-ui-built/components/input/input';
 import Checkbox from '@jetbrains/ring-ui-built/components/checkbox/checkbox';
 import {H3} from '@jetbrains/ring-ui-built/components/heading/heading';
+import Tooltip from '@jetbrains/ring-ui-built/components/tooltip/tooltip';
 import {AppSettings} from '../../interfaces';
 
 interface Props {
@@ -14,7 +15,14 @@ export const CustomFieldMapping: React.FC<Props> = ({ settings, setSettings }) =
 
   return (
     <div className="settings-field custom-field-mapping">
-      <H3>Custom Field Mapping</H3>
+      <div className="settings-section-heading">
+        <H3>Custom Field Mapping</H3>
+        <Tooltip
+          title="Links a YouTrack custom field to releases so issues are auto-assigned when the field changes. Requires the 'Update Releases on Custom Field Change' workflow to be enabled in the project. 'Use existing field values' populates a dropdown of current field values when creating a release version."
+        >
+          <span className="settings-help-icon">?</span>
+        </Tooltip>
+      </div>
       <div className="field-help">
         Specify the custom field that stores the planned release version for issues.
       </div>
