@@ -234,3 +234,32 @@
     height: 1px;
   }
 }
+
+/* Help icon next to settings section headings */
+.settings-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--ring-borders-color);
+  color: var(--ring-secondary-color);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: default;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.settings-help-icon:hover {
+  background: var(--ring-icon-color);
+  color: var(--ring-content-background-color);
+}

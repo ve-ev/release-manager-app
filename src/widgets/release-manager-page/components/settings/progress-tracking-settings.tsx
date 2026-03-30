@@ -4,6 +4,7 @@ import Input from '@jetbrains/ring-ui-built/components/input/input';
 import Button from '@jetbrains/ring-ui-built/components/button/button';
 import Tag from '@jetbrains/ring-ui-built/components/tag/tag';
 import ErrorMessage from '@jetbrains/ring-ui-built/components/error-message/error-message';
+import Tooltip from '@jetbrains/ring-ui-built/components/tooltip/tooltip';
 import {AppSettings} from '../../interfaces';
 
 interface Props {
@@ -77,7 +78,14 @@ export const ProgressTrackingSettings: React.FC<Props> = ({ settings, setSetting
 
   return (
     <div className="settings-column left">
-      <H3>Progress Tracking Settings</H3>
+      <div className="settings-section-heading">
+        <H3>Progress Tracking Settings</H3>
+        <Tooltip
+          title="Track issue completion per release. 'Custom Field Names' is a fallback chain — the first matching field found on an issue is used. Zone values map issue field values to the colored progress bar: green = done, yellow = in progress, red = blocked."
+        >
+          <span className="settings-help-icon">?</span>
+        </Tooltip>
+      </div>
       <br/>
 
       {errors.length > 0 && (

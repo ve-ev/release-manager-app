@@ -3,6 +3,7 @@ import Input from '@jetbrains/ring-ui-built/components/input/input';
 import Button from '@jetbrains/ring-ui-built/components/button/button';
 import Tag from '@jetbrains/ring-ui-built/components/tag/tag';
 import {H3} from '@jetbrains/ring-ui-built/components/heading/heading';
+import Tooltip from '@jetbrains/ring-ui-built/components/tooltip/tooltip';
 import {AppSettings} from '../../interfaces';
 import {generateColorFromString} from '../../utils/helpers';
 
@@ -44,7 +45,14 @@ export const TagsSettings: React.FC<Props> = ({
 }) => {
   return (
     <div className="settings-field">
-      <H3>Tags</H3>
+      <div className="settings-section-heading">
+        <H3>Tags</H3>
+        <Tooltip
+          title="Color-coded labels assignable to release versions for visual grouping and filtering. Tags are project-scoped and shared across all releases in this project."
+        >
+          <span className="settings-help-icon">?</span>
+        </Tooltip>
+      </div>
       {(settings.products || []).length === 0 ? (
         <div className="field-help">No tags configured yet.</div>
       ) : (
