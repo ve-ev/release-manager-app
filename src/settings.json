@@ -2,11 +2,11 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "title": "Release Manager Settings",
-  "description": "App settings stored per project",
+  "description": "Configure roles and enable optional features for the Release Manager app. Changes take effect immediately after saving.",
   "properties": {
     "releaseManagers": {
-      "title": "Release managers",
-      "description": "Administration role",
+      "title": "Release Managers",
+      "description": "User groups with full access: create, edit, and delete releases; freeze and unfreeze releases; access app settings; and view the audit trail. Assign at least one group to ensure someone can manage the app.",
       "type": "array",
       "items": {
         "x-entity": "UserGroup",
@@ -15,7 +15,7 @@
     },
     "lightManagers": {
       "title": "Light Release Managers",
-      "description": "User role with option to edit already existing release versions",
+      "description": "User groups that can edit existing release versions (change title, dates, description, and planned issues) but cannot create or delete releases, freeze or unfreeze releases, or access app settings.",
       "type": "array",
       "items": {
         "x-entity": "UserGroup",
@@ -24,16 +24,17 @@
     },
     "manualIssueManagement": {
       "title": "Feature: Manual Issue Management",
+      "description": "When enabled, release managers can manually override the progress status of individual planned issues — marking them as Fixed, Merged, or Descoped — independently of the issue's actual custom field value in YouTrack. Useful when an issue is closed via a non-standard workflow or needs to be excluded from progress tracking without being removed from the release.",
       "type": "boolean"
     },
     "metaIssuesEnabled": {
       "title": "Feature: Meta Issues",
-      "description": "Allow to create meta-issue for showing in release version",
+      "description": "When enabled, release managers can create meta-issues inside a release — placeholder entries that group or represent a set of related work (e.g. an epic or a feature). Meta-issues appear in the release alongside regular planned issues and can carry their own progress state.",
       "type": "boolean"
     },
     "customFieldsMapping": {
-      "title": "Feature: Custom Fields Mapping",
-      "description": "Allow to mapping existing enum/build custom fields to set release version",
+      "title": "Feature: Custom Field Sync",
+      "description": "When enabled, a 'Custom Field Mapping' section appears in the project's app settings. Configure a YouTrack enum or build-type custom field to act as the release assignment field: when a user changes that field on an issue, the workflow automatically adds or removes the issue from the corresponding release. Requires the 'Update Releases on Custom Field Change' workflow to be active in the project.",
       "type": "boolean"
     }
   },
