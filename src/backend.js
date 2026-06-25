@@ -576,6 +576,177 @@ function findReleaseByVersion(ctx, version) {
 }
 
 /**
+ * Syncs releaseDate and/or isReleased to the matching CF version bundle value.
+ * No-op if customFieldsMapping is disabled or the field/value is not found.
+ *
+ * @param {Object} ctx
+ * @param {string} versionName - release version name to look up in the bundle
+ * @param {string|null} releaseDate - YYYY-MM-DD string, or null to skip
+ * @param {boolean|null} isReleased - boolean to set, or null to skip
+ */
+/**
+ * Updates VersionBundleElement properties via the YouTrack REST API.
+ * Direct scripting API property assignment is read-only in HTTP handler context,
+ * so the admin REST API is the only supported path for setting releaseDate/startDate/released.
+ *
+ * @param {Object} ctx
+ * @param {string} fieldName - project custom field name
+ * @param {string} versionName - bundle element name to update
+ * @param {string|null} releaseDate - YYYY-MM-DD or null
+ * @param {string|null} startDate - YYYY-MM-DD or null
+ * @param {boolean|null} isReleased - boolean or null to leave unchanged
+ */
+function updateVersionElementProperties(ctx, fieldName, versionName, releaseDate, startDate, isReleased) {
+    var http;
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        http = require('@jetbrains/youtrack-scripting-api/http');
+    } catch (e) {
+        logError('[ReleaseManager][REST] http module unavailable', e);
+        return;
+    }
+    try {
+        // Prefer server-side URL derivation (not request-controlled) over the stored client value.
+        // ctx.project.absoluteUrl gives e.g. "https://instance.youtrack.cloud/projects/0-1" —
+        // extract the origin to avoid forwarding credentials to a client-supplied host.
+        var baseUrl = '';
+        var projAbsUrl = '';
+        try {
+            projAbsUrl = ctx.project.absoluteUrl || ctx.project.homeUrl || '';
+            if (projAbsUrl) {
+                var parsed = new URL(projAbsUrl);
+                baseUrl = parsed.origin; // scheme + host only, no path
+            }
+        } catch (e) { /* absoluteUrl not available in this context */ }
+
+        // Fall back to URL stored by the frontend when server-side derivation is unavailable.
+        var storedUrl = '';
+        if (!baseUrl) {
+            try {
+                storedUrl = (ctx.project.extensionProperties && ctx.project.extensionProperties.youtrackBaseUrl) || '';
+                baseUrl = storedUrl;
+            } catch (urlErr) { /* ignore */ }
+        }
+        // eslint-disable-next-line no-console
+        console.log('[ReleaseManager][REST] baseUrl resolution: absoluteUrl=', projAbsUrl || 'N/A', 'stored=', storedUrl || 'N/A', 'resolved=', baseUrl || 'NONE');
+        if (!baseUrl) {
+            // eslint-disable-next-line no-console
+            console.log('[ReleaseManager][REST] YouTrack base URL not available — open the Release Manager widget to register it');
+            return;
+        }
+
+        var authHeader = ctx.request && ctx.request.headers &&
+            (ctx.request.headers.Authorization || ctx.request.headers.authorization);
+        if (!authHeader) {
+            // eslint-disable-next-line no-console
+            console.log('[ReleaseManager][REST] no Authorization header in request');
+            return;
+        }
+
+        var projectKey = '';
+        try { projectKey = ctx.project.shortName || ctx.project.key || ''; } catch (e) { /* ignore */ }
+        if (!projectKey) {
+            // eslint-disable-next-line no-console
+            console.log('[ReleaseManager][REST] could not determine project short name');
+            return;
+        }
+
+        var conn = new http.Connection(baseUrl, 30000);
+        conn.addHeader('Authorization', authHeader);
+        conn.addHeader('Accept', 'application/json');
+        conn.addHeader('Content-Type', 'application/json');
+
+        // Step 1: get bundle ID for the field
+        var fieldsResp = conn.getSync('/api/admin/projects/' + encodeURIComponent(projectKey) +
+            '/customFields?fields=id,name,field(id,name,bundle(id))&$top=200');
+        var fieldsCode = (fieldsResp && fieldsResp.code) || 0;
+        if (!fieldsResp || fieldsCode >= 400) {
+            logError('[ReleaseManager][REST] project fields request failed', 'code=' + fieldsCode);
+            return;
+        }
+        var fieldsArr = JSON.parse(fieldsResp.response || '[]');
+        var bundleId = null;
+        var lowerFn = (fieldName || '').toLowerCase();
+        for (var fi = 0; fi < fieldsArr.length; fi++) {
+            var pf = fieldsArr[fi];
+            if (pf && pf.name && pf.name.toLowerCase() === lowerFn) {
+                bundleId = pf.field && pf.field.bundle && pf.field.bundle.id;
+                break;
+            }
+        }
+        if (!bundleId) {
+            // eslint-disable-next-line no-console
+            console.log('[ReleaseManager][REST] bundle not found for field:', fieldName);
+            return;
+        }
+
+        // Step 2: find element ID by name
+        var valResp = conn.getSync('/api/admin/customFieldSettings/bundles/version/' + bundleId +
+            '/values?fields=id,name&$top=1000');
+        var valCode = (valResp && valResp.code) || 0;
+        if (!valResp || valCode >= 400) {
+            logError('[ReleaseManager][REST] bundle values request failed', 'code=' + valCode);
+            return;
+        }
+        var valArr = JSON.parse(valResp.response || '[]');
+        var elementId = null;
+        for (var vi = 0; vi < valArr.length; vi++) {
+            if (valArr[vi] && valArr[vi].name === versionName) {
+                elementId = valArr[vi].id;
+                break;
+            }
+        }
+        if (!elementId) {
+            // eslint-disable-next-line no-console
+            console.log('[ReleaseManager][REST] element not found by name:', versionName);
+            return;
+        }
+
+        // Step 3: update element properties
+        var body = {};
+        if (releaseDate !== null && releaseDate !== undefined) { body.releaseDate = new Date(releaseDate).getTime(); }
+        if (startDate !== null && startDate !== undefined) { body.startDate = new Date(startDate).getTime(); }
+        if (isReleased !== null && isReleased !== undefined) { body.released = !!isReleased; }
+        if (Object.keys(body).length === 0) { return; }
+
+        var updateResp = conn.postSync(
+            '/api/admin/customFieldSettings/bundles/version/' + bundleId + '/values/' + elementId +
+            '?fields=id,name,releaseDate,startDate,released',
+            null,
+            JSON.stringify(body)
+        );
+        var updateCode = (updateResp && updateResp.code) || 0;
+        if (!updateResp || updateCode >= 400) {
+            logError('[ReleaseManager][REST] element update failed', 'code=' + updateCode + ' body=' + (updateResp && updateResp.response || ''));
+        } else {
+            // eslint-disable-next-line no-console
+            console.log('[ReleaseManager][REST] updated element', elementId, JSON.stringify(body));
+        }
+    } catch (e) {
+        logError('[ReleaseManager][REST] unexpected error updating bundle element', e);
+    }
+}
+
+function syncVersionFieldValue(ctx, versionName, releaseDate, isReleased, startDate) {
+    if (!ctx.settings || !ctx.settings.customFieldsMapping) { return; }
+    if (!versionName) { return; }
+    try {
+        const appSettings = getAppSettings(ctx);
+        const fieldName = appSettings && appSettings.customFieldMapping && appSettings.customFieldMapping.plannedReleaseField;
+        if (!fieldName) { return; }
+        const field = ctx.project.findFieldByName(fieldName);
+        if (!field) { return; }
+        // Verify the element exists before making REST calls
+        const value = field.findValueByName(versionName);
+        if (!value) { return; }
+        // Direct scripting API property assignment is read-only in HTTP handler context — use REST API
+        updateVersionElementProperties(ctx, fieldName, versionName, releaseDate, startDate, isReleased);
+    } catch (e) {
+        logError('Failed to sync version field value', e);
+    }
+}
+
+/**
  * Adds an issue to a given release (by id) if not yet present and persists changes.
  * @param {Object} ctx
  * @param {string} releaseId
@@ -1258,8 +1429,7 @@ exports.httpHandler = {
                                 if (fieldName && releaseVersion.version) {
                                     const field = ctx.project.findFieldByName(fieldName);
                                     if (field) {
-                                        const existingValue = field.findValueByName(releaseVersion.version);
-                                        if (!existingValue) {
+                                        if (!field.findValueByName(releaseVersion.version)) {
                                             field.createValue(releaseVersion.version);
                                         }
                                     }
@@ -1327,6 +1497,50 @@ exports.httpHandler = {
                     // Get existing release versions
                     const releaseVersions = getReleaseVersions(ctx);
                     const initialLength = releaseVersions.length;
+
+                    // Before deleting, remove the version value from all planned issues' CF fields
+                    try {
+                        if (ctx.settings && ctx.settings.customFieldsMapping) {
+                            const releaseToDelete = releaseVersions.find(function(rv) { return rv.id === id; });
+                            if (releaseToDelete && releaseToDelete.version && Array.isArray(releaseToDelete.plannedIssues)) {
+                                const appSettings = getAppSettings(ctx);
+                                const fieldName = appSettings && appSettings.customFieldMapping && appSettings.customFieldMapping.plannedReleaseField;
+                                if (fieldName) {
+                                    const field = ctx.project.findFieldByName(fieldName);
+                                    if (field) {
+                                        for (let d = 0; d < releaseToDelete.plannedIssues.length; d++) {
+                                            const issueRef = releaseToDelete.plannedIssues[d];
+                                            if (!issueRef || !issueRef.id) { continue; }
+                                            try {
+                                                const issue = entities.Issue.findById(issueRef.id);
+                                                if (!issue) { continue; }
+                                                if (issue.extensionProperties) {
+                                                    issue.extensionProperties.updatedByReleaseManager = true;
+                                                }
+                                                const currentFieldValue = issue.fields[field.name];
+                                                const isMultiValue = currentFieldValue && typeof currentFieldValue.forEach === 'function' && typeof currentFieldValue.add === 'function';
+                                                if (isMultiValue) {
+                                                    const valueToRemove = field.findValueByName(releaseToDelete.version);
+                                                    if (valueToRemove && typeof currentFieldValue.delete === 'function') {
+                                                        currentFieldValue.delete(valueToRemove);
+                                                    }
+                                                } else {
+                                                    const currentName = currentFieldValue && typeof currentFieldValue.name === 'string' ? currentFieldValue.name : null;
+                                                    if (currentName === releaseToDelete.version) {
+                                                        issue.fields[field.name] = null;
+                                                    }
+                                                }
+                                            } catch (issueErr) {
+                                                logError('Failed to clean CF for issue ' + (issueRef.id || ''), issueErr);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } catch (cleanupErr) {
+                        logError('Failed to clean up CF values on release deletion', cleanupErr);
+                    }
 
                     // Filter out the release version to delete
                     const updatedReleaseVersions = releaseVersions.filter(rv => rv.id !== id);
@@ -1495,6 +1709,25 @@ exports.httpHandler = {
             }
         },
         {
+            method: 'GET',
+            path: 'project-info',
+            scope: 'project',
+            handle: function handle(ctx) {
+                try {
+                    var projectId = '', shortName = '', name = '';
+                    try { projectId = ctx.project.id || ''; } catch(e) {}
+                    try { shortName = ctx.project.shortName || ctx.project.key || ''; } catch(e) {}
+                    try { name = ctx.project.name || ''; } catch(e) {}
+                    // eslint-disable-next-line no-console
+                    console.log('[ReleaseManager][project-info] id=' + projectId + ' shortName=' + shortName + ' name=' + name);
+                    ctx.response.json({ projectId: projectId || shortName, shortName: shortName, name: name });
+                } catch (error) {
+                    logError('Failed to get project info', error);
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
+                }
+            }
+        },
+        {
             method: 'POST',
             path: 'custom-field-set',
             scope: 'project',
@@ -1632,6 +1865,7 @@ exports.httpHandler = {
                         values.push({
                             name: v.name || '',
                             releaseDate: v.releaseDate ? new Date(v.releaseDate).toISOString().split('T')[0] : null,
+                            startDate: v.startDate ? new Date(v.startDate).toISOString().split('T')[0] : null,
                             isReleased: !!v.isReleased,
                             isArchived: !!v.isArchived
                         });
@@ -1686,6 +1920,7 @@ exports.httpHandler = {
                             id: Date.now().toString() + '-' + i,
                             version: v.name,
                             releaseDate: releaseDate,
+                            featureFreezeDate: v.startDate || undefined,
                             status: status,
                             linkedIssues: [],
                             plannedIssues: []

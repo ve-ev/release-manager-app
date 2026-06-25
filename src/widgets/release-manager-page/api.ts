@@ -248,13 +248,69 @@ export class API {
     });
   }
 
-  async getVersionFieldValues(fieldName: string): Promise<{ fieldName: string; values: Array<{ name: string; releaseDate: string | null; isReleased: boolean; isArchived: boolean }> }> {
-    return this.fetchJson<{ fieldName: string; values: Array<{ name: string; releaseDate: string | null; isReleased: boolean; isArchived: boolean }> }>(
+  /**
+   * Updates releaseDate / startDate / released on a YouTrack VersionBundleElement
+   * directly via host.fetchYouTrack() — the scripting API makes these properties
+   * read-only in HTTP handler context, so the REST API is the only supported path.
+   */
+  /**
+   * Updates releaseDate / startDate / released on a YouTrack VersionBundleElement
+   * via host.fetchYouTrack() — 2 REST calls:
+   *   1. GET project custom fields with nested bundle+values (finds bundleId + elementId in one shot)
+   *   2. POST the update
+   * Requires "Update Project" permission (project-level, not global admin).
+   */
+  async syncVersionBundleElement(
+    fieldName: string,
+    versionName: string,
+    releaseDate: string | null,
+    startDate: string | null,
+    isReleased: boolean | null
+  ): Promise<void> {
+    if (!fieldName || !versionName) { return; }
+
+    // Get project ID from backend — more reliable than YTApp.entity which may be undefined
+    const projectInfo = await this.fetchJson<{ projectId: string; shortName: string }>('backend/project-info');
+    const projectId = projectInfo?.projectId || projectInfo?.shortName || '';
+    if (!projectId) { return; }
+
+    // Step 1: bundle is a direct property of ProjectCustomField, not nested under field.
+    // One call returns bundleId + all element IDs/names.
+    const customFields = await this.host.fetchYouTrack<Array<{
+      id: string;
+      field: { id: string; name: string } | null;
+      bundle: { id: string; values: Array<{ id: string; name: string }> } | null;
+    }>>(`admin/projects/${encodeURIComponent(projectId)}/customFields?fields=id,field(id,name),bundle(id,values(id,name))&$top=200`);
+
+    const matchedField = (customFields || []).find(f =>
+      f.field?.name?.toLowerCase() === fieldName.toLowerCase()
+    );
+    const bundle = matchedField?.bundle;
+    if (!bundle?.id) { return; }
+
+    const element = (bundle.values || []).find(v => v.name === versionName);
+    if (!element?.id) { return; }
+
+    // Step 2: update only the properties that were explicitly provided (null = leave unchanged)
+    const body: Record<string, unknown> = {};
+    if (releaseDate !== null && releaseDate !== undefined) { body.releaseDate = new Date(releaseDate).getTime(); }
+    if (startDate !== null && startDate !== undefined) { body.startDate = new Date(startDate).getTime(); }
+    if (isReleased !== null && isReleased !== undefined) { body.released = isReleased; }
+    if (Object.keys(body).length === 0) { return; }
+
+    await this.host.fetchYouTrack(
+      `admin/customFieldSettings/bundles/version/${encodeURIComponent(bundle.id)}/values/${encodeURIComponent(element.id)}?fields=id,name,releaseDate,startDate,released`,
+      { method: 'POST', body }
+    );
+  }
+
+  async getVersionFieldValues(fieldName: string): Promise<{ fieldName: string; values: Array<{ name: string; releaseDate: string | null; startDate: string | null; isReleased: boolean; isArchived: boolean }> }> {
+    return this.fetchJson<{ fieldName: string; values: Array<{ name: string; releaseDate: string | null; startDate: string | null; isReleased: boolean; isArchived: boolean }> }>(
       `backend/version-field-values?fieldName=${encodeURIComponent(fieldName)}`
     );
   }
 
-  async importVersions(fieldName: string, versions: Array<{ name: string; releaseDate: string | null; isReleased: boolean }>): Promise<{ imported: string[]; skipped: string[]; totalImported: number; totalSkipped: number }> {
+  async importVersions(fieldName: string, versions: Array<{ name: string; releaseDate: string | null; startDate: string | null; isReleased: boolean }>): Promise<{ imported: string[]; skipped: string[]; totalImported: number; totalSkipped: number }> {
     return this.fetchJson<{ imported: string[]; skipped: string[]; totalImported: number; totalSkipped: number }>('backend/import-versions', {
       method: 'POST',
       body: { fieldName, versions }

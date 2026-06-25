@@ -94,6 +94,22 @@ const AppComponent: React.FunctionComponent = () => {
     onBackgroundMembershipChange: handleWorkflowMembershipChange
   });
 
+  // Syncs version bundle element dates/released flag via host.fetchYouTrack().
+  // The scripting API makes these properties read-only in HTTP handler context,
+  // so we call the YouTrack admin REST API directly from the frontend.
+  const syncVersionBundleElement = useCallback(async (
+    version: string,
+    releaseDate: string | null,
+    featureFreezeDate: string | null,
+    isReleased: boolean | null
+  ) => {
+    if (!config.customFieldsMapping) { return; }
+    const fieldName = settings.customFieldMapping?.plannedReleaseField;
+    if (!fieldName || !version) { return; }
+    // projectId is now fetched inside syncVersionBundleElement via GET /project-info
+    await api.syncVersionBundleElement(fieldName, version, releaseDate, featureFreezeDate, isReleased);
+  }, [config.customFieldsMapping, settings.customFieldMapping?.plannedReleaseField]);
+
   // Track in-flight custom field updates to prevent duplicates
   const pendingCustomFieldUpdates = useRef<Set<string>>(new Set());
 
@@ -219,12 +235,20 @@ const AppComponent: React.FunctionComponent = () => {
           auditEvents: updated.auditEvents || null
         }
       }));
+      // Sync released flag (and dates when marking as Released) to the CF bundle element
+      const releasing = newStatus === 'Released';
+      syncVersionBundleElement(
+        item.version || '',
+        releasing ? (item.releaseDate || null) : null,
+        releasing ? (item.featureFreezeDate || null) : null,
+        releasing
+      ).catch(e => logger.error('Failed to sync bundle element on status change', e));
     } catch (e) {
       logger.error('Failed to change release status', e);
     } finally {
       setPendingReleaseStatusChange(null);
     }
-  }, [pendingReleaseStatusChange]);
+  }, [pendingReleaseStatusChange, syncVersionBundleElement]);
 
   // Handle creating or updating a release version
   const handleSaveReleaseVersion = useCallback(async (releaseVersion: ReleaseVersion) => {
@@ -233,6 +257,14 @@ const AppComponent: React.FunctionComponent = () => {
         // Update existing release version
         await api.updateReleaseVersion(releaseVersion);
         setAlertMessage('Release version updated successfully');
+
+        // Sync dates to bundle element whenever they change
+        syncVersionBundleElement(
+          releaseVersion.version || '',
+          releaseVersion.releaseDate || null,
+          releaseVersion.featureFreezeDate || null,
+          null
+        ).catch(e => logger.error('Failed to sync bundle element on update', e));
 
         // After updating, handle custom field changes for added/removed issues
         const plannedReleaseField = settings.customFieldMapping?.plannedReleaseField;
@@ -247,6 +279,14 @@ const AppComponent: React.FunctionComponent = () => {
         // Create new release version
         await api.createReleaseVersion(releaseVersion);
         setAlertMessage('Release version created successfully');
+
+        // Sync dates to the newly created bundle element
+        syncVersionBundleElement(
+          releaseVersion.version || '',
+          releaseVersion.releaseDate || null,
+          releaseVersion.featureFreezeDate || null,
+          null
+        ).catch(e => logger.error('Failed to sync bundle element on create', e));
 
         // After creating a new release, set custom field on all added issues
         const plannedReleaseField = settings.customFieldMapping?.plannedReleaseField;
@@ -268,7 +308,7 @@ const AppComponent: React.FunctionComponent = () => {
       setAlertMessage('Failed to save release version. Please try again.');
       // Don't rethrow - handle gracefully with user feedback
     }
-  }, [fetchReleaseVersions, settings.customFieldMapping?.plannedReleaseField, config.customFieldsMapping, currentReleaseVersion, computeIssueChanges, handleCustomFieldUpdates]);
+  }, [fetchReleaseVersions, settings.customFieldMapping?.plannedReleaseField, config.customFieldsMapping, currentReleaseVersion, computeIssueChanges, handleCustomFieldUpdates, syncVersionBundleElement]);
 
   // Handle confirming delete
   const handleConfirmDelete = useCallback((releaseVersion: ReleaseVersion) => {
