@@ -8,6 +8,7 @@ import {ReleaseVersion} from '../../interfaces';
 interface VersionValue {
   name: string;
   releaseDate: string | null;
+  startDate: string | null;
   isReleased: boolean;
   isArchived: boolean;
 }
@@ -133,6 +134,7 @@ export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSet
       const toImport = selectedImportableVersions.map(v => ({
         name: v.name,
         releaseDate: v.releaseDate,
+        startDate: v.startDate,
         isReleased: v.isReleased
       }));
       const response = await api.importVersions(fieldName, toImport);
@@ -222,6 +224,7 @@ export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSet
               </th>
               <th style={{padding: '8px'}}>Version</th>
               <th style={{padding: '8px'}}>Release Date</th>
+              <th style={{padding: '8px'}}>Start Date</th>
               <th style={{padding: '8px'}}>Released</th>
               <th style={{padding: '8px'}}>Archived</th>
               <th style={{padding: '8px', width: '120px', whiteSpace: 'nowrap'}}>Status</th>
@@ -230,7 +233,7 @@ export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSet
           <tbody>
             {versions.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{padding: '24px 8px', textAlign: 'center', color: '#999'}}>
+                <td colSpan={7} style={{padding: '24px 8px', textAlign: 'center', color: '#999'}}>
                   Click &quot;Fetch Versions&quot; to load available versions
                 </td>
               </tr>
@@ -262,6 +265,7 @@ export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSet
                   </td>
                   <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.name}</td>
                   <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.releaseDate || '—'}</td>
+                  <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.startDate || '—'}</td>
                   <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.isReleased ? '✓' : ''}</td>
                   <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.isArchived ? '✓' : ''}</td>
                   <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle', width: '120px', whiteSpace: 'nowrap', color: alreadyExists ? '#2196F3' : undefined}}>{status}</td>
