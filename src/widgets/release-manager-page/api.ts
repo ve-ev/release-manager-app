@@ -12,46 +12,7 @@ export class API {
 
   // ----- Issue field getters -----
   /**
-   * Check whether a field (or one of the candidate names) exists on the given issue.
-   * If multiple names are provided (comma-separated), backend returns the first resolved name.
-   */
-  async issueFieldExists(issueId: string, fieldNames: string[]): Promise<{ exists: boolean; resolvedName: string | null }> {
-    const list = (fieldNames || []).filter(Boolean).join(',');
-    return this.fetchJson<{ exists: boolean; resolvedName: string | null }>(
-      `backend-global/issue-field-exists?issueId=${encodeURIComponent(issueId)}&fieldName=${encodeURIComponent(list)}`
-    );
-  }
-
-  /**
-   * Fetch bulk field values for parent issue and its subtasks for a specific field name.
-   */
-  async getIssueFieldBulk(issueId: string, fieldName: string): Promise<{ issueId: string; fieldName: string; items: Array<{ id: string; value: string | null }> }> {
-    return this.fetchJson<{ issueId: string; fieldName: string; items: Array<{ id: string; value: string | null }> }>(
-      `backend-global/issue-field-bulk?issueId=${encodeURIComponent(issueId)}&fieldName=${encodeURIComponent(fieldName)}`
-    );
-  }
-
-  /**
-   * Try fetching bulk field values for the first available field among the provided candidates.
-   * Returns items array and the actual resolved field name if found.
-   */
-  async getIssueFieldBulkForFirstAvailable(issueId: string, fieldNames: string[]): Promise<{ items: Array<{ id: string; value: string | null }>; usedField?: string }> {
-    try {
-      const exists = await this.issueFieldExists(issueId, fieldNames);
-      if (exists && exists.exists && exists.resolvedName) {
-        const bulk = await this.getIssueFieldBulk(issueId, exists.resolvedName);
-        const items = Array.isArray(bulk?.items) ? bulk.items : [];
-        return { items, usedField: exists.resolvedName || undefined };
-      }
-    } catch {
-      // ignore and fall through to empty
-    }
-    return { items: [] };
-  }
-
-  /**
    * Batch fetch bulk field values for multiple issues at once.
-   * This is much more efficient than calling getIssueFieldBulkForFirstAvailable in a loop.
    *
    * @param issueIds - Array of issue IDs to fetch
    * @param fieldNames - Array of field names to try (in order)
