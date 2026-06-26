@@ -94,9 +94,6 @@ const AppComponent: React.FunctionComponent = () => {
     onBackgroundMembershipChange: handleWorkflowMembershipChange
   });
 
-  // Syncs version bundle element dates/released flag via host.fetchYouTrack().
-  // The scripting API makes these properties read-only in HTTP handler context,
-  // so we call the YouTrack admin REST API directly from the frontend.
   const syncVersionBundleElement = useCallback(async (
     version: string,
     releaseDate: string | null,
@@ -106,7 +103,6 @@ const AppComponent: React.FunctionComponent = () => {
     if (!config.customFieldsMapping) { return; }
     const fieldName = settings.customFieldMapping?.plannedReleaseField;
     if (!fieldName || !version) { return; }
-    // projectId is now fetched inside syncVersionBundleElement via GET /project-info
     await api.syncVersionBundleElement(fieldName, version, releaseDate, featureFreezeDate, isReleased);
   }, [config.customFieldsMapping, settings.customFieldMapping?.plannedReleaseField]);
 

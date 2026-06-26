@@ -56,6 +56,11 @@ export class API {
     cachedSettingsPromise = null;
   }
 
+  /** Write a message to the YouTrack App Technical Log (fire-and-forget). */
+  private serverLog(message: string, level = 'DEBUG'): void {
+    this.fetchJson('backend/app-log', { method: 'POST', body: { level, message } }).catch(() => {});
+  }
+
   /**
    * Fetch JSON data from backend
    */
@@ -210,16 +215,9 @@ export class API {
   }
 
   /**
-   * Updates releaseDate / startDate / released on a YouTrack VersionBundleElement
-   * directly via host.fetchYouTrack() — the scripting API makes these properties
-   * read-only in HTTP handler context, so the REST API is the only supported path.
-   */
-  /**
-   * Updates releaseDate / startDate / released on a YouTrack VersionBundleElement
-   * via host.fetchYouTrack() — 2 REST calls:
-   *   1. GET project custom fields with nested bundle+values (finds bundleId + elementId in one shot)
-   *   2. POST the update
-   * Requires "Update Project" permission (project-level, not global admin).
+   * Updates releaseDate / startDate / released on a YouTrack VersionBundleElement.
+   * Uses host.fetchYouTrack() — it handles the server URL and auth automatically.
+   * The project ID comes from YTApp.entity.id (the permanent REST-compatible ID).
    */
   async syncVersionBundleElement(
     fieldName: string,
@@ -230,39 +228,55 @@ export class API {
   ): Promise<void> {
     if (!fieldName || !versionName) { return; }
 
-    // Get project ID from backend — more reliable than YTApp.entity which may be undefined
-    const projectInfo = await this.fetchJson<{ projectId: string; shortName: string }>('backend/project-info');
-    const projectId = projectInfo?.projectId || projectInfo?.shortName || '';
-    if (!projectId) { return; }
+    const projectId = YTApp.entity?.type === 'project' ? (YTApp.entity.id || '') : '';
+    if (!projectId) {
+      this.serverLog('syncVersionBundleElement: no project entity ID, skipping');
+      return;
+    }
+    this.serverLog(`syncVersionBundleElement: field="${fieldName}" version="${versionName}" project="${projectId}"`);
 
-    // Step 1: bundle is a direct property of ProjectCustomField, not nested under field.
-    // One call returns bundleId + all element IDs/names.
+    // Step 1: fetch bundle ID only (no nested values — avoids YouTrack REST default ~42-element
+    // cap; $top=1000 matches step 2 for consistency). Request bundle via both projections:
+    //   bundle(id)             — project-specific bundle (correct for independent copies)
+    //   field(id,name,bundle(id)) — global field definition's bundle (fallback for global bundles
+    //                             where the direct property may not be returned by some versions)
     const customFields = await this.host.fetchYouTrack<Array<{
-      id: string;
-      field: { id: string; name: string } | null;
-      bundle: { id: string; values: Array<{ id: string; name: string }> } | null;
-    }>>(`admin/projects/${encodeURIComponent(projectId)}/customFields?fields=id,field(id,name),bundle(id,values(id,name))&$top=200`);
+      field: { name: string; bundle?: { id: string } | null } | null;
+      bundle: { id: string } | null;
+    }>>(`admin/projects/${encodeURIComponent(projectId)}/customFields?fields=id,field(id,name,bundle(id)),bundle(id)&$top=1000`);
 
-    const matchedField = (customFields || []).find(f =>
-      f.field?.name?.toLowerCase() === fieldName.toLowerCase()
+    const lowerFieldName = fieldName.toLowerCase();
+    const matched = (customFields || []).find(f => f.field?.name?.toLowerCase() === lowerFieldName);
+    // Prefer project-specific bundle (independent copy); fall back to global field bundle.
+    const bundleId = matched?.bundle?.id || matched?.field?.bundle?.id;
+    this.serverLog(`syncVersionBundleElement: customFields=${(customFields || []).length} matched=${!!matched} bundleId=${bundleId || 'NOT_FOUND'}`);
+    if (!bundleId) { return; }
+
+    // Step 2: fetch all elements with explicit $top=1000 (YouTrack's implicit cap is ~42).
+    const allValues = await this.host.fetchYouTrack<Array<{ id: string; name: string }>>(
+      `admin/customFieldSettings/bundles/version/${encodeURIComponent(bundleId)}/values?fields=id,name&$top=1000`
     );
-    const bundle = matchedField?.bundle;
-    if (!bundle?.id) { return; }
+    // Exact match intentional — version names are created by this app so casing is canonical.
+    const elementId = (allValues || []).find(v => v.name === versionName)?.id;
+    this.serverLog(`syncVersionBundleElement: values=${(allValues || []).length} elementId=${elementId || 'NOT_FOUND'}`);
+    if (!elementId) { return; }
 
-    const element = (bundle.values || []).find(v => v.name === versionName);
-    if (!element?.id) { return; }
-
-    // Step 2: update only the properties that were explicitly provided (null = leave unchanged)
+    // Step 3: write the update. Guard against NaN timestamps from unexpected date string formats.
     const body: Record<string, unknown> = {};
-    if (releaseDate !== null && releaseDate !== undefined) { body.releaseDate = new Date(releaseDate).getTime(); }
-    if (startDate !== null && startDate !== undefined) { body.startDate = new Date(startDate).getTime(); }
+    if (releaseDate !== null && releaseDate !== undefined) { const t = new Date(releaseDate).getTime(); if (!isNaN(t)) { body.releaseDate = t; } }
+    if (startDate !== null && startDate !== undefined) { const t = new Date(startDate).getTime(); if (!isNaN(t)) { body.startDate = t; } }
     if (isReleased !== null && isReleased !== undefined) { body.released = isReleased; }
-    if (Object.keys(body).length === 0) { return; }
+    if (Object.keys(body).length === 0) {
+      this.serverLog('syncVersionBundleElement: no fields to update, skipping');
+      return;
+    }
 
+    this.serverLog(`syncVersionBundleElement: posting update body=${JSON.stringify(body)}`);
     await this.host.fetchYouTrack(
-      `admin/customFieldSettings/bundles/version/${encodeURIComponent(bundle.id)}/values/${encodeURIComponent(element.id)}?fields=id,name,releaseDate,startDate,released`,
+      `admin/customFieldSettings/bundles/version/${encodeURIComponent(bundleId)}/values/${encodeURIComponent(elementId)}?fields=id,name,releaseDate,startDate,released`,
       { method: 'POST', body }
     );
+    this.serverLog('syncVersionBundleElement: done');
   }
 
   async getVersionFieldValues(fieldName: string): Promise<{ fieldName: string; values: Array<{ name: string; releaseDate: string | null; startDate: string | null; isReleased: boolean; isArchived: boolean }> }> {
