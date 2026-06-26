@@ -21,6 +21,7 @@ const HTTP_STATUS = {
     CREATED: 201,
     NO_CONTENT: 204,
     BAD_REQUEST: 400,
+    FORBIDDEN: 403,
     NOT_FOUND: 404
 };
 
@@ -30,10 +31,14 @@ const HTTP_STATUS = {
  * @param {string} message - Error context message
  * @param {Error|string} error - The error object or message
  */
-function logError(message, error) {
-    // eslint-disable-next-line no-console
-    console.log(`${message}: ${error.message || error}`);
+/* eslint-disable no-console */
+function log(message) {
+    console.log('[ReleaseManager] ' + message);
 }
+function logError(message, error) {
+    console.log('[ReleaseManager] ERROR ' + message + ': ' + (error && (error.message || error)));
+}
+/* eslint-enable no-console */
 
 /**
  * Validates version field in release version object
@@ -594,8 +599,7 @@ function addIssueToRelease(ctx, releaseId, issueId, issueSummary) {
         rv.linkedIssues = list;
         saveReleaseVersions(ctx, releaseVersions);
 
-        // eslint-disable-next-line no-console
-        console.log('[ReleaseManager][Backend] Issue', issueId, 'added to release', rv.version || rv.id);
+        log('[Backend] Issue ' + issueId + ' added to release ' + (rv.version || rv.id));
     }
 }
 
@@ -621,8 +625,7 @@ function removeIssueFromOtherReleases(ctx, issueId, exceptReleaseId) {
     }
     if (changed) {
         saveReleaseVersions(ctx, releaseVersions);
-        // eslint-disable-next-line no-console
-        console.log('[ReleaseManager][Backend] Issue', issueId, 'removed from releases', removedFrom.join(', ') || '<none>');
+        log('[Backend] Issue ' + issueId + ' removed from releases ' + (removedFrom.join(', ') || '<none>'));
     }
 }
 
@@ -949,8 +952,7 @@ function setIssuePlannedMembership(ctx, issueId, targetReleases, issueSummary) {
         }
         if (changed) {
             saveReleaseVersions(ctx, releaseVersions);
-            // eslint-disable-next-line no-console
-            console.log('[ReleaseManager][Backend] Issue', issueId, 'removed from planned issues for releases', removedFrom.join(', ') || '<none>');
+            log('[Backend] Issue ' + issueId + ' removed from planned issues for releases ' + (removedFrom.join(', ') || '<none>'));
         }
         return;
     }
@@ -985,9 +987,8 @@ function setIssuePlannedMembership(ctx, issueId, targetReleases, issueSummary) {
 
     if (changed) {
         saveReleaseVersions(ctx, releaseVersions);
-        // eslint-disable-next-line no-console
-        console.log('[ReleaseManager][Backend] Issue', issueId, 'linked to planned releases', addedTo.join(', ') || '<none>',
-            'and removed from planned releases', removedFrom.join(', ') || '<none>');
+        log('[Backend] Issue ' + issueId + ' linked to planned releases ' + (addedTo.join(', ') || '<none>') +
+            ' and removed from planned releases ' + (removedFrom.join(', ') || '<none>'));
     }
 }
 
@@ -1031,13 +1032,11 @@ function updateReleasesForIssue(ctx, issue, values) {
     }
 
     if (unmatchedValues.length > 0) {
-        // eslint-disable-next-line no-console
-        console.log('[ReleaseManager][Backend] No matching releases found for values', unmatchedValues.join(', '), '— issue', issueId);
+        log('[Backend] No matching releases found for values ' + unmatchedValues.join(', ') + ' — issue ' + issueId);
     }
 
     if (matchedReleases.length === 0) {
-        // eslint-disable-next-line no-console
-        console.log('[ReleaseManager][Backend] No matching releases found — issue', issueId, 'removed from all planned releases');
+        log('[Backend] No matching releases found — issue ' + issueId + ' removed from all planned releases');
         setIssuePlannedMembership(ctx, issueId, null);
         return;
     }
@@ -1246,29 +1245,32 @@ exports.httpHandler = {
                     if (saveReleaseVersions(ctx, releaseVersions)) {
                         // After creating release version, create custom field value if custom field mapping is configured
                         try {
-                            // Check if custom fields mapping feature is enabled
                             if (ctx.settings.customFieldsMapping) {
                                 const appSettings = getAppSettings(ctx);
                                 let settings = appSettings;
                                 if (typeof appSettings === 'string') {
                                     settings = JSON.parse(appSettings);
                                 }
-
                                 const fieldName = settings && settings.customFieldMapping && settings.customFieldMapping.plannedReleaseField;
                                 if (fieldName && releaseVersion.version) {
                                     const field = ctx.project.findFieldByName(fieldName);
                                     if (field) {
                                         if (!field.findValueByName(releaseVersion.version)) {
                                             field.createValue(releaseVersion.version);
+                                            log('created CF bundle value "' + releaseVersion.version + '" in field "' + fieldName + '"');
+                                        } else {
+                                            log('CF bundle value "' + releaseVersion.version + '" already exists in field "' + fieldName + '"');
                                         }
+                                    } else {
+                                        log('field "' + fieldName + '" not found in project — cannot create bundle value');
                                     }
                                 }
                             }
                         } catch (e) {
-                            // Log error but don't fail the release creation
                             logError('Failed to create custom field value for new release', e);
                         }
 
+                        log('created release version id=' + releaseVersion.id + ' version=' + releaseVersion.version);
                         ctx.response.code = HTTP_STATUS.CREATED;
                         const canViewAudit = isReleaseManager(ctx);
                         ctx.response.json(stripAuditEventsIfNeeded(releaseVersion, canViewAudit));
@@ -1337,6 +1339,7 @@ exports.httpHandler = {
                                 if (fieldName) {
                                     const field = ctx.project.findFieldByName(fieldName);
                                     if (field) {
+                                        log('deleting release "' + releaseToDelete.version + '" — clearing CF "' + fieldName + '" on ' + releaseToDelete.plannedIssues.length + ' issues');
                                         for (let d = 0; d < releaseToDelete.plannedIssues.length; d++) {
                                             const issueRef = releaseToDelete.plannedIssues[d];
                                             if (!issueRef || !issueRef.id) { continue; }
@@ -1363,6 +1366,8 @@ exports.httpHandler = {
                                                 logError('Failed to clean CF for issue ' + (issueRef.id || ''), issueErr);
                                             }
                                         }
+                                    } else {
+                                        log('delete: field "' + fieldName + '" not found — skipping CF cleanup');
                                     }
                                 }
                             }
@@ -1538,6 +1543,26 @@ exports.httpHandler = {
             }
         },
         {
+            method: 'POST',
+            path: 'app-log',
+            scope: 'project',
+            handle: function handle(ctx) {
+                try {
+                    const body = ctx.request.json();
+                    const ALLOWED_LEVELS = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
+                    const rawLevel = (body && body.level) || 'DEBUG';
+                    const safeLevel = ALLOWED_LEVELS.includes(rawLevel) ? rawLevel : 'DEBUG';
+                    const safeMsg = String((body && body.message) || '').replace(/[\r\n]/g, ' ').slice(0, 2000);
+                    log('[' + safeLevel + '] ' + safeMsg);
+                    ctx.response.json({ ok: true });
+                } catch(e) {
+                    ctx.response.json({ ok: false });
+                }
+            }
+        },
+        {
+            // Diagnostic endpoint — not called by the main sync path.
+            // Useful for debugging ctx.project.id availability on specific YouTrack instances.
             method: 'GET',
             path: 'project-info',
             scope: 'project',
@@ -1547,8 +1572,6 @@ exports.httpHandler = {
                     try { projectId = ctx.project.id || ''; } catch(e) {}
                     try { shortName = ctx.project.shortName || ctx.project.key || ''; } catch(e) {}
                     try { name = ctx.project.name || ''; } catch(e) {}
-                    // eslint-disable-next-line no-console
-                    console.log('[ReleaseManager][project-info] id=' + projectId + ' shortName=' + shortName + ' name=' + name);
                     ctx.response.json({ projectId: projectId || shortName, shortName: shortName, name: name });
                 } catch (error) {
                     logError('Failed to get project info', error);
@@ -1636,8 +1659,7 @@ exports.httpHandler = {
                     if (!existingValue) {
                         try {
                             existingValue = field.createValue(payload.value);
-                            // eslint-disable-next-line no-console
-                            console.log('[ReleaseManager][Backend] Created new bundle value', payload.value, 'for field', payload.fieldName);
+                            log('[Backend] Created new bundle value ' + payload.value + ' for field ' + payload.fieldName);
                         } catch (createErr) {
                             logError('Failed to create custom field value', createErr);
                             sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Custom field value does not exist and could not be created: ' + (createErr.message || createErr));
@@ -1768,8 +1790,7 @@ exports.httpHandler = {
                                 });
                             }
                         } catch (searchErr) {
-                            // eslint-disable-next-line no-console
-                            console.log('[ReleaseManager][Import] Search failed for version ' + v.name + ': ' + (searchErr.message || searchErr));
+                            log('[Import] Search failed for version ' + v.name + ': ' + (searchErr.message || searchErr));
                         }
 
                         existingReleases.push(newRelease);
