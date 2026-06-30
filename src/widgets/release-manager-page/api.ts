@@ -56,11 +56,6 @@ export class API {
     cachedSettingsPromise = null;
   }
 
-  /** Write a message to the YouTrack App Technical Log (fire-and-forget). */
-  private serverLog(message: string, level = 'DEBUG'): void {
-    this.fetchJson('backend/app-log', { method: 'POST', body: { level, message } }).catch(() => {});
-  }
-
   /**
    * Fetch JSON data from backend
    */
@@ -229,11 +224,7 @@ export class API {
     if (!fieldName || !versionName) { return; }
 
     const projectId = YTApp.entity?.type === 'project' ? (YTApp.entity.id || '') : '';
-    if (!projectId) {
-      this.serverLog('syncVersionBundleElement: no project entity ID, skipping');
-      return;
-    }
-    this.serverLog(`syncVersionBundleElement: field="${fieldName}" version="${versionName}" project="${projectId}"`);
+    if (!projectId) { return; }
 
     // Step 1: fetch bundle ID only (no nested values — avoids YouTrack REST default ~42-element
     // cap; $top=1000 matches step 2 for consistency). Request bundle via both projections:
@@ -249,7 +240,7 @@ export class API {
     const matched = (customFields || []).find(f => f.field?.name?.toLowerCase() === lowerFieldName);
     // Prefer project-specific bundle (independent copy); fall back to global field bundle.
     const bundleId = matched?.bundle?.id || matched?.field?.bundle?.id;
-    this.serverLog(`syncVersionBundleElement: customFields=${(customFields || []).length} matched=${!!matched} bundleId=${bundleId || 'NOT_FOUND'}`);
+;
     if (!bundleId) { return; }
 
     // Step 2: fetch all elements with explicit $top=1000 (YouTrack's implicit cap is ~42).
@@ -258,7 +249,6 @@ export class API {
     );
     // Exact match intentional — version names are created by this app so casing is canonical.
     const elementId = (allValues || []).find(v => v.name === versionName)?.id;
-    this.serverLog(`syncVersionBundleElement: values=${(allValues || []).length} elementId=${elementId || 'NOT_FOUND'}`);
     if (!elementId) { return; }
 
     // Step 3: write the update. Guard against NaN timestamps from unexpected date string formats.
@@ -266,17 +256,12 @@ export class API {
     if (releaseDate !== null && releaseDate !== undefined) { const t = new Date(releaseDate).getTime(); if (!isNaN(t)) { body.releaseDate = t; } }
     if (startDate !== null && startDate !== undefined) { const t = new Date(startDate).getTime(); if (!isNaN(t)) { body.startDate = t; } }
     if (isReleased !== null && isReleased !== undefined) { body.released = isReleased; }
-    if (Object.keys(body).length === 0) {
-      this.serverLog('syncVersionBundleElement: no fields to update, skipping');
-      return;
-    }
+    if (Object.keys(body).length === 0) { return; }
 
-    this.serverLog(`syncVersionBundleElement: posting update body=${JSON.stringify(body)}`);
     await this.host.fetchYouTrack(
       `admin/customFieldSettings/bundles/version/${encodeURIComponent(bundleId)}/values/${encodeURIComponent(elementId)}?fields=id,name,releaseDate,startDate,released`,
       { method: 'POST', body }
     );
-    this.serverLog('syncVersionBundleElement: done');
   }
 
   async getVersionFieldValues(fieldName: string): Promise<{ fieldName: string; values: Array<{ name: string; releaseDate: string | null; startDate: string | null; isReleased: boolean; isArchived: boolean }> }> {
@@ -290,5 +275,17 @@ export class API {
       method: 'POST',
       body: { fieldName, versions }
     });
+  }
+
+  async refreshCalendarData(): Promise<void> {
+    try {
+      await this.host.fetchApp('backend/refresh-calendar-data', {
+        method: 'POST',
+        body: {},
+        scope: true
+      });
+    } catch {
+      // Non-critical — silently ignore if user is not RM or request fails
+    }
   }
 }

@@ -47,6 +47,7 @@
   white-space: nowrap; /* keep text on one line */
   overflow: hidden; /* prevent overflow into neighbors */
   text-overflow: ellipsis; /* show ellipsis when too long */
+  font-variant-numeric: tabular-nums;
 }
 
 /* Progress Dot Styles */

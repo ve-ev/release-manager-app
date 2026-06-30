@@ -11,6 +11,8 @@
   box-sizing: border-box;
   margin-left: auto;
   margin-right: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .header {
@@ -42,7 +44,10 @@
 .form-container {
   background-color: var(--ring-content-background-color);
   border-radius: var(--ring-border-radius);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 2px 4px rgba(0, 0, 0, 0.06),
+    0 4px 12px rgba(0, 0, 0, 0.08);
   padding: calc(var(--ring-unit) * 2);
   max-width: 800px;
   width: 100%;

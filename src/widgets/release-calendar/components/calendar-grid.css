@@ -1,0 +1,318 @@
+:root {
+  --rc-shadow-border:
+    0px 0px 0px 1px rgba(0, 0, 0, 0.06),
+    0px 1px 2px -1px rgba(0, 0, 0, 0.06),
+    0px 2px 4px 0px rgba(0, 0, 0, 0.04);
+  --rc-shadow-border-hover:
+    0px 0px 0px 1px rgba(0, 0, 0, 0.08),
+    0px 1px 2px -1px rgba(0, 0, 0, 0.08),
+    0px 2px 4px 0px rgba(0, 0, 0, 0.06);
+}
+
+.rc-grid-container { display: flex; flex-direction: column; gap: 12px; border-radius: 8px; padding: 4px; }
+
+.rc-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rc-toolbar-title {
+  font-size: 15px;
+  font-weight: 600;
+  min-width: 140px;
+  text-align: center;
+  text-wrap: balance;
+}
+.rc-toolbar-spacer { flex: 1; }
+
+/* Refresh button icon */
+.rc-refresh-icon {
+  display: inline-block;
+  font-size: 14px;
+  line-height: 1;
+}
+@keyframes rc-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.rc-refresh-icon--spinning {
+  animation: rc-spin 0.7s linear infinite;
+  /* Use animation not transition — one-shot spinning sequence */
+}
+.rc-chips-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 0 4px;
+  align-items: center;
+}
+.rc-project-chip {
+  border-radius: 100px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1.5px solid var(--ring-borders-color);
+  background: transparent;
+  color: var(--ring-secondary-color);
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s cubic-bezier(0.2, 0, 0, 1),
+              border-color 0.15s cubic-bezier(0.2, 0, 0, 1),
+              color 0.15s cubic-bezier(0.2, 0, 0, 1),
+              transform 0.1s cubic-bezier(0.2, 0, 0, 1);
+  user-select: none;
+  will-change: transform;
+}
+.rc-project-chip:not(.rc-project-chip--active):hover {
+  background: var(--ring-hover-background-color);
+  border-color: var(--ring-main-color);
+  color: var(--ring-text-color);
+}
+.rc-project-chip--active {
+  background: var(--ring-main-color);
+  border-color: var(--ring-main-color);
+  color: var(--ring-white-text-color, #fff);
+}
+.rc-project-chip:active {
+  transform: scale(0.96);
+}
+.rc-project-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+.rc-project-chip-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+/* Month grid */
+.rc-month-grid { display: flex; flex-direction: column; gap: 2px; }
+.rc-month-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; text-wrap: balance; }
+.rc-month-title--clickable {
+  cursor: pointer;
+  transition: color 0.15s ease-out;
+  display: inline-block;
+}
+.rc-month-title--clickable:hover {
+  color: var(--ring-main-color);
+}
+.rc-day-headers {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.rc-day-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  padding: 4px 2px;
+  color: var(--ring-secondary-color);
+}
+.rc-days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  /* No overflow:hidden — allows cell box-shadows to show at grid edges */
+}
+.rc-day-cell {
+  min-height: 52px;
+  padding: 4px;
+  box-shadow: var(--rc-shadow-border);
+  border-radius: 4px;
+  background: var(--ring-content-background-color);
+  transition-property: box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+  /* No overflow:hidden — allows cell box-shadows to render correctly */
+  min-width: 0;
+}
+.rc-day-cell:hover {
+  box-shadow: var(--rc-shadow-border-hover);
+}
+.rc-day-cell--today {
+  box-shadow: 0 0 0 2px var(--ring-main-color), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  background: var(--ring-content-background-color);
+}
+.rc-day-cell--empty {
+  background: transparent;
+  box-shadow: none;
+}
+.rc-day-number { font-size: 12px; color: var(--ring-text-color); font-variant-numeric: tabular-nums; }
+.rc-day-markers { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 3px; min-width: 0; /* No overflow:hidden — allows marker box-shadow glow to render at edges */ }
+.rc-marker {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  /* box-shadow for hover — consistent with portal tooltip approach */
+  transition-property: box-shadow;
+  transition-duration: 0.1s;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  /* no will-change — box-shadow is not GPU-compositable */
+  display: inline-block;
+}
+.rc-marker:hover {
+  /* box-shadow glow instead of scale — scale() creates a stacking context that
+     can affect fixed-position portal tooltip placement */
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 20%, transparent);
+  z-index: 1;
+}
+
+/* Quarter view */
+.rc-quarter-view {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+/* Year view */
+.rc-year-view {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+/* Mini month (quarter/year) */
+.rc-month-mini .rc-day-cell {
+  min-height: 28px;
+  padding: 2px;
+}
+.rc-month-mini .rc-day-number { font-size: 10px; }
+.rc-month-mini .rc-marker { width: 5px; height: 5px; }
+.rc-month-mini .rc-day-header { font-size: 9px; padding: 2px 1px; }
+
+/* ── Portal tooltip (renders at document.body — always top level) ── */
+.rc-tooltip-portal {
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 8px));
+  background: rgba(28, 28, 28, 0.92);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  z-index: 99999;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: rc-tooltip-in 0.12s ease-out both;
+}
+
+@keyframes rc-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-100% - 4px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, calc(-100% - 8px));
+  }
+}
+
+/* Event tags (full month view) */
+.rc-event-tag {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  line-height: 1.3;
+  padding: 1px 4px 1px 6px;
+  border-radius: 3px;
+  border-left: 2px solid transparent;
+  margin-top: 2px;
+  background: var(--ring-hover-background-color);
+  cursor: default;
+  overflow: hidden; /* restored — Portal tooltips are no longer clipped by parent overflow */
+  max-width: 100%;
+  min-width: 0;
+  transition: opacity 0.1s ease-out;
+}
+.rc-event-tag:hover {
+  opacity: 0.8;
+}
+.rc-event-tag-prefix {
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.rc-event-tag-version {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ring-text-color);
+  flex-shrink: 1;
+  min-width: 0;
+}
+.rc-event-tag-project {
+  color: var(--ring-secondary-color);
+  font-size: 9px;
+  flex-shrink: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.rc-event-tag-product {
+  color: var(--ring-secondary-color);
+  font-size: 9px;
+  flex-shrink: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.rc-project-chip-name {
+  text-wrap: pretty;
+}
+
+.rc-event-tag-check {
+  color: var(--ring-secondary-color);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.rc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  align-items: center;
+  padding: 4px 0 2px;
+}
+.rc-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--ring-secondary-color);
+  -webkit-font-smoothing: antialiased;
+}
+.rc-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.rc-legend-label {
+  text-wrap: pretty;
+  white-space: nowrap;
+}

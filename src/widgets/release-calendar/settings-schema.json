@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "type": "object",
+  "properties": {
+    "projectIdsJson": { "type": "string" },
+    "defaultView": { "type": "string", "enum": ["month", "quarter", "year"] },
+    "showFreezeDates": { "type": "string" },
+    "showProjectName": { "type": "string" },
+    "showProduct": { "type": "string" }
+  }
+}

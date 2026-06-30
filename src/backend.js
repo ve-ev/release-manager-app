@@ -155,6 +155,140 @@ function saveReleaseVersions(ctx, releaseVersions) {
 }
 
 /**
+ * Writes a calendar snapshot to extension properties for use by the global backend.
+ * Stores simplified release data + current user's login in the authorized viewers list.
+ * @param {Object} ctx
+ * @param {Array} releases
+ */
+function persistCalendarSnapshot(ctx, releases) {
+    try {
+        // Simplified releases for the calendar
+        var calendarReleases = releases.map(function (r) {
+            return {
+                id: r.id,
+                version: r.version,
+                featureFreezeDate: r.featureFreezeDate !== undefined ? r.featureFreezeDate : null,
+                releaseDate: r.releaseDate,
+                status: r.status || 'Planning',
+                product: r.product || undefined
+            };
+        });
+
+        var snapshot = {
+            projectShortName: ctx.project.shortName || '',
+            projectName: ctx.project.name || ctx.project.shortName || '',
+            releases: calendarReleases
+        };
+        ctx.project.extensionProperties.calendarSnapshot = JSON.stringify(snapshot);
+
+        // Only add confirmed Release Managers to calendarViewers
+        if (isReleaseManager(ctx)) {
+            var viewersJson = ctx.project.extensionProperties.calendarViewers;
+            var viewers = viewersJson ? JSON.parse(viewersJson) : [];
+            if (!Array.isArray(viewers)) { viewers = []; }
+            var login = ctx.currentUser && (ctx.currentUser.login || ctx.currentUser.name);
+            if (login && viewers.indexOf(login) === -1) {
+                viewers.push(login);
+                var newViewersJson = JSON.stringify(viewers);
+                ctx.project.extensionProperties.calendarViewers = newViewersJson;
+                // Also write via entities.Project path (same reason as persistReleaseManagerGroups)
+                try {
+                    var shortName2 = ctx.project && ctx.project.shortName;
+                    if (shortName2) {
+                        var pe2 = entities.Project.findByKey(shortName2);
+                        if (pe2) {
+                            pe2.extensionProperties.calendarViewers = newViewersJson;
+                            pe2.extensionProperties.calendarSnapshot = JSON.stringify(snapshot);
+                        }
+                    }
+                } catch (e2) { /* ignore */ }
+                log('[backend] persistCalendarSnapshot: added viewer=' + login + ' for project=' + (ctx.project && ctx.project.shortName));
+            }
+        }
+    } catch (e) {
+        logError('Failed to persist calendar snapshot', e);
+    }
+}
+
+/**
+ * Registers the current project shortName in the app-global RM project registry
+ * (AppGlobalStorage.rmProjectShortNames). The global backend reads this list to
+ * enumerate which projects have RM data, then cross-checks calendarViewers per-project.
+ * @param {Object} ctx
+ */
+function persistUserRmProjects(ctx) {
+    log('[backend] persistUserRmProjects: STARTING for project=' + (ctx.project && ctx.project.shortName));
+    try {
+        var shortName = ctx.project && ctx.project.shortName;
+        if (!shortName) {
+            log('[backend] persistUserRmProjects: no shortName, skipping');
+            return;
+        }
+
+        var existing = [];
+        try {
+            var raw = ctx.globalStorage && ctx.globalStorage.extensionProperties && ctx.globalStorage.extensionProperties.rmProjectShortNames;
+            log('[backend] persistUserRmProjects: globalStorage raw=' + (raw || 'NOT SET'));
+            if (raw) { existing = JSON.parse(raw); }
+            if (!Array.isArray(existing)) { existing = []; }
+        } catch (e) {
+            log('[backend] persistUserRmProjects: read error=' + (e && e.message));
+            existing = [];
+        }
+
+        if (existing.indexOf(shortName) === -1) {
+            existing.push(shortName);
+            ctx.globalStorage.extensionProperties.rmProjectShortNames = JSON.stringify(existing);
+            log('[backend] persistUserRmProjects: registered ' + shortName + ', total=' + existing.length);
+        } else {
+            log('[backend] persistUserRmProjects: ' + shortName + ' already registered, total=' + existing.length);
+        }
+    } catch (e) {
+        logError('Failed to persist RM project registry', e);
+    }
+}
+
+/**
+ * Mirrors release manager group names into extension properties so the
+ * global backend can check per-project RM role without project-scoped settings.
+ * @param {Object} ctx
+ */
+function persistReleaseManagerGroups(ctx) {
+    try {
+        // Use forEach instead of Array.isArray — YouTrack settings return Java-backed
+        // collections that are iterable but fail Array.isArray checks.
+        var groups = [];
+        var rmSetting = ctx.settings && ctx.settings.releaseManagers;
+        if (rmSetting) {
+            rmSetting.forEach(function (g) {
+                var name = g && (typeof g.name === 'string' ? g.name : null);
+                if (name) { groups.push(name); }
+            });
+        }
+        var groupsJson = JSON.stringify(groups);
+        // Write via ctx.project (project-scoped HTTP handler store)
+        ctx.project.extensionProperties.releaseManagerGroups = groupsJson;
+        // Also write via entities.Project.findByKey — the global backend reads from this entity path.
+        // ctx.project.extensionProperties and entities.Project.findByKey().extensionProperties
+        // use different underlying stores in YouTrack HTTP handlers.
+        try {
+            var shortName = ctx.project && ctx.project.shortName;
+            if (shortName) {
+                var projectEntity = entities.Project.findByKey(shortName);
+                if (projectEntity) {
+                    projectEntity.extensionProperties.releaseManagerGroups = groupsJson;
+                }
+            }
+        } catch (entityErr) {
+            log('[backend] persistReleaseManagerGroups: entity write failed: ' + (entityErr && (entityErr.message || entityErr)));
+        }
+        log('[backend] persistReleaseManagerGroups: wrote groups=' + groupsJson + ' for project=' + (ctx.project && ctx.project.shortName));
+    } catch (e) {
+        logError('Failed to persist releaseManagerGroups', e);
+    }
+}
+
+/**
  * Sets error response with appropriate status code and message
  *
  * @param {Object} ctx - The context object
@@ -1190,31 +1324,36 @@ exports.httpHandler = {
             }
         },
         /**
-         * GET /release - Retrieve a specific release version by ID
+         * POST /refresh-calendar-data
+         * Persists calendarSnapshot and releaseManagerGroups to extension properties.
+         * Called by the RM widget frontend on load — GET handlers cannot persist writes.
          */
         {
-            method: 'GET',
-            path: 'release',
+            method: 'POST',
+            path: 'refresh-calendar-data',
             scope: 'project',
             handle: function handle(ctx) {
                 try {
-                    const id = ctx.request.getParameter('id');
-                    const releaseVersions = getReleaseVersions(ctx);
-                    const releaseVersion = releaseVersions.find(rv => rv.id === id);
-
-                    if (releaseVersion) {
-                        const canViewAudit = isReleaseManager(ctx);
-                        ctx.response.json(stripAuditEventsIfNeeded(releaseVersion, canViewAudit));
-                    } else {
-                        sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Release version not found');
+                    var userLogin = ctx.currentUser && ctx.currentUser.login;
+                    var projectShortName = ctx.project && ctx.project.shortName;
+                    log('[refresh-calendar-data] called by=' + userLogin + ' project=' + projectShortName + ' isRM=' + isReleaseManager(ctx));
+                    if (!isReleaseManager(ctx)) {
+                        ctx.response.code = HTTP_STATUS.FORBIDDEN;
+                        ctx.response.json({ ok: false, reason: 'not a release manager' });
+                        return;
                     }
+                    var releaseVersions = getReleaseVersions(ctx);
+                    persistCalendarSnapshot(ctx, releaseVersions);
+                    persistReleaseManagerGroups(ctx);
+                    persistUserRmProjects(ctx);
+                    log('[refresh-calendar-data] done — releases=' + releaseVersions.length);
+                    ctx.response.json({ ok: true });
                 } catch (error) {
-                    logError('Failed to get release version', error);
+                    logError('Failed to refresh calendar data', error);
                     sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
                 }
             }
         },
-
         /**
          * POST /releases - Create a new release version
          */
@@ -1243,6 +1382,7 @@ exports.httpHandler = {
                     releaseVersions.push(releaseVersion);
 
                     if (saveReleaseVersions(ctx, releaseVersions)) {
+                        persistReleaseManagerGroups(ctx);
                         // After creating release version, create custom field value if custom field mapping is configured
                         try {
                             if (ctx.settings.customFieldsMapping) {
@@ -1297,6 +1437,7 @@ exports.httpHandler = {
                     const updatedReleaseVersion = ctx.request.json();
                     const updated = updateReleaseById(ctx, id, updatedReleaseVersion);
                     if (updated) {
+                        persistReleaseManagerGroups(ctx);
                         const canViewAudit = isReleaseManager(ctx);
                         ctx.response.json(stripAuditEventsIfNeeded(updated, canViewAudit));
                     } else {
@@ -1384,6 +1525,7 @@ exports.httpHandler = {
                         const saveResult = saveReleaseVersions(ctx, updatedReleaseVersions);
 
                         if (saveResult) {
+                            persistReleaseManagerGroups(ctx);
                             ctx.response.code = HTTP_STATUS.NO_CONTENT;
                         } else {
                             sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Failed to delete release version');
@@ -1539,24 +1681,6 @@ exports.httpHandler = {
                 } catch (error) {
                     logError('Failed to set expanded version', error);
                     sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
-                }
-            }
-        },
-        {
-            method: 'POST',
-            path: 'app-log',
-            scope: 'project',
-            handle: function handle(ctx) {
-                try {
-                    const body = ctx.request.json();
-                    const ALLOWED_LEVELS = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
-                    const rawLevel = (body && body.level) || 'DEBUG';
-                    const safeLevel = ALLOWED_LEVELS.includes(rawLevel) ? rawLevel : 'DEBUG';
-                    const safeMsg = String((body && body.message) || '').replace(/[\r\n]/g, ' ').slice(0, 2000);
-                    log('[' + safeLevel + '] ' + safeMsg);
-                    ctx.response.json({ ok: true });
-                } catch(e) {
-                    ctx.response.json({ ok: false });
                 }
             }
         },

@@ -12,11 +12,20 @@ export interface HubService {
   homeUrl: string;
 }
 
+export interface AppStorage {
+  getItem(key: string): Promise<string | null>;
+  setItem(key: string, value: string): Promise<void>;
+  removeItem(key: string): Promise<void>;
+  clear(): Promise<void>;
+  getKeys(): Promise<string[]>;
+}
+
 interface BaseAPILayer {
   alert: (...args: Parameters<(typeof AlertService)['addAlert']>) => void;
   enterModalMode: Promise<() => void>;
   exitModalMode: Promise<() => void>;
   collapse: () => void;
+  storage: AppStorage;
 }
 
 /*

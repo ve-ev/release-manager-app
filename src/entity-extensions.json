@@ -14,6 +14,15 @@
         },
         "expandedVersion" : {
           "type": "string"
+        },
+        "releaseManagerGroups": {
+          "type": "string"
+        },
+        "calendarSnapshot": {
+          "type": "string"
+        },
+        "calendarViewers": {
+          "type": "string"
         }
       }
     },
@@ -21,6 +30,14 @@
       "entityType": "User",
       "properties": {
         "expandedVersion" : {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "entityType": "AppGlobalStorage",
+      "properties": {
+        "rmProjectShortNames": {
           "type": "string"
         }
       }
