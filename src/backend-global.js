@@ -23,6 +23,76 @@ const HTTP_STATUS = {
 };
 
 /**
+ * Diagnostic logging utility
+ *
+ * @param {string} message - Log message
+ */
+function log(message) {
+    // eslint-disable-next-line no-console
+    console.log('[ReleaseCalendar] ' + message);
+}
+
+/**
+ * Returns true if the current user is an authorized Release Manager viewer for the given project.
+ * Reads the calendarViewers extension property (denormalized by backend.js on GET /releases).
+ *
+ * @param {Object} project - YouTrack project entity
+ * @param {Object} currentUser - ctx.currentUser
+ * @returns {boolean}
+ */
+function isUserRmForProject(project, currentUser) {
+    try {
+        // Primary: calendarViewers login list (written on RM tab visit after update)
+        var viewersJson = project.extensionProperties && project.extensionProperties.calendarViewers;
+        if (viewersJson) {
+            var viewers = JSON.parse(viewersJson);
+            if (Array.isArray(viewers)) {
+                var login = currentUser && (currentUser.login || currentUser.name);
+                if (login && viewers.indexOf(login) !== -1) { return true; }
+            }
+        }
+
+        // Fallback: check releaseManagerGroups via currentUser.groups collection
+        var groupsJson = project.extensionProperties && project.extensionProperties.releaseManagerGroups;
+        log('    releaseManagerGroups = ' + (groupsJson || 'NOT SET'));
+        if (!groupsJson) { return false; }
+        var groups = JSON.parse(groupsJson);
+        if (!Array.isArray(groups) || groups.length === 0) {
+            log('    groups array empty');
+            return false;
+        }
+
+        log('    currentUser.login = ' + (currentUser && currentUser.login));
+
+        for (var i = 0; i < groups.length; i++) {
+            var groupName = groups[i];
+            // Try isInGroup
+            try {
+                var inGroupResult = currentUser.isInGroup && currentUser.isInGroup(groupName);
+                log('    isInGroup("' + groupName + '") = ' + inGroupResult);
+                if (inGroupResult) { return true; }
+            } catch (e1) { log('    isInGroup threw: ' + (e1 && e1.message)); }
+            // Try iterating currentUser.groups
+            try {
+                var matched = false;
+                var groupsCount = 0;
+                currentUser.groups.forEach(function (g) {
+                    groupsCount++;
+                    if (g && g.name === groupName) { matched = true; }
+                });
+                log('    currentUser.groups count=' + groupsCount + ' matched="' + groupName + '"=' + matched);
+                if (matched) { return true; }
+            } catch (e2) { log('    currentUser.groups threw: ' + (e2 && e2.message)); }
+        }
+
+        return false;
+    } catch (e) {
+        log('    isUserRmForProject error: ' + (e && (e.message || e)));
+        return false;
+    }
+}
+
+/**
  * Error logger utility function
  *
  * @param {string} message - Error context message
@@ -80,37 +150,6 @@ function resolveFieldNameCaseInsensitive(issue, orderedNames) {
     return null;
 }
 
-function prepareCustomFieldData(issue, fieldName) {
-    if (!issue) {
-        return null;
-    }
-    // Support ordered list of field names (comma/semicolon separated). Pick the first existing.
-    const names = (fieldName || '')
-        .toString()
-        .split(/[;,]/)
-        .map(function (s) {
-            return s.trim();
-        })
-        .filter(function (s) {
-            return !!s;
-        });
-    const orderedNames = names.length > 0 ? names : [fieldName];
-
-    var selectedName = orderedNames.length > 0 ? orderedNames[0] : fieldName;
-    var value = null;
-    if (issue && issue.fields) {
-        var actualName = resolveFieldNameCaseInsensitive(issue, orderedNames);
-        if (actualName) {
-            selectedName = actualName;
-            var fld = issue.fields[actualName];
-            value = (fld && typeof fld.name === 'string') ? fld.name : null;
-        }
-    }
-    return {
-        name: selectedName,
-        value: value
-    };
-}
 
 /**
  * Sets error response with appropriate status code and message
@@ -202,141 +241,6 @@ exports.httpHandler = {
             }
         },
         {
-            method: 'GET',
-            path: 'issue-field',
-            permissions: ['READ_ISSUE'],
-            handle: function handle(ctx) {
-                try {
-                    const issueId = ctx.request.getParameter('issueId');
-                    const fieldName = ctx.request.getParameter('fieldName');
-
-                    if (!issueId) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue ID is required');
-                        return;
-                    }
-                    if (!fieldName) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field name is required');
-                        return;
-                    }
-                    const foundIssue = entities.Issue.findById(issueId);
-                    if (foundIssue) {
-                        const data = prepareCustomFieldData(foundIssue, fieldName)
-                        ctx.response.json(data);
-                    } else {
-                        sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Issue not found');
-                    }
-                } catch (error) {
-                    logError('Failed to get issue field', error);
-                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
-                }
-            }
-        },
-        {
-            method: 'GET',
-            path: 'issue-field-exists',
-            permissions: ['READ_ISSUE'],
-            handle: function handle(ctx) {
-                try {
-                    const issueId = ctx.request.getParameter('issueId');
-                    const fieldName = ctx.request.getParameter('fieldName');
-                    if (!issueId) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue ID is required');
-                        return;
-                    }
-                    if (!fieldName) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field name is required');
-                        return;
-                    }
-                    const issue = entities.Issue.findById(issueId);
-                    if (!issue) {
-                        sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Issue not found');
-                        return;
-                    }
-                    const names = (fieldName || '')
-                        .toString()
-                        .split(/[;,]/)
-                        .map(function (s) {
-                            return s.trim();
-                        })
-                        .filter(function (s) {
-                            return !!s;
-                        });
-                    const orderedNames = names.length > 0 ? names : [fieldName];
-                    const actual = resolveFieldNameCaseInsensitive(issue, orderedNames);
-                    ctx.response.json({exists: !!actual, resolvedName: actual});
-                } catch (error) {
-                    logError('Failed to check issue field existence', error);
-                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
-                }
-            }
-        },
-        {
-            method: 'GET',
-            path: 'issue-field-bulk',
-            permissions: ['READ_ISSUE'],
-            handle: function handle(ctx) {
-                try {
-                    const issueId = ctx.request.getParameter('issueId');
-                    const fieldName = ctx.request.getParameter('fieldName');
-                    if (!issueId) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue ID is required');
-                        return;
-                    }
-                    if (!fieldName) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field name is required');
-                        return;
-                    }
-                    const parent = entities.Issue.findById(issueId);
-                    if (!parent) {
-                        sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Issue not found');
-                        return;
-                    }
-                    // collect ids: parent first, then all subtasks
-                    const ids = [issueId];
-                    parent.links['parent for'].forEach(function (subTask) {
-                        ids.push(subTask.id);
-                    });
-
-                    // Support multiple field names in order (comma/semicolon separated)
-                    const names = (fieldName || '')
-                        .toString()
-                        .split(/[;,]/)
-                        .map(function (s) {
-                            return s.trim();
-                        })
-                        .filter(function (s) {
-                            return !!s;
-                        });
-                    const orderedNames = names.length > 0 ? names : [fieldName];
-
-                    // First resolve actual field name on parent (case-insensitive). If not exists, skip fetching per-issue values
-                    const selectedActualName = resolveFieldNameCaseInsensitive(parent, orderedNames);
-
-                    const items = [];
-                    for (let i = 0; i < ids.length; i++) {
-                        const id = ids[i];
-                        const it = entities.Issue.findById(id);
-                        let value = null;
-                        if (selectedActualName && it && it.fields) {
-                            const fld = it.fields[selectedActualName];
-                            if (fld) {
-                                value = (typeof fld.name === 'string') ? fld.name : null;
-                            }
-                        }
-                        items.push({id: id, value: value});
-                    }
-                    ctx.response.json({
-                        parentIssueId: issueId,
-                        fieldName: selectedActualName || fieldName,
-                        items: items
-                    });
-                } catch (error) {
-                    logError('Failed to get issue field bulk', error);
-                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
-                }
-            }
-        },
-        {
             method: 'POST',
             path: 'issue-field-bulk-batch',
             permissions: ['READ_ISSUE'],
@@ -404,6 +308,117 @@ exports.httpHandler = {
                     ctx.response.json(results);
                 } catch (error) {
                     logError('Failed to get issue field bulk batch', error);
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
+                }
+            }
+        },
+        /**
+         * GET /my-rm-projects
+         * Returns the list of projects where the current user has the Release Manager role.
+         * Written server-side by backend.js /refresh-calendar-data on each RM widget visit.
+         */
+        {
+            method: 'GET',
+            path: 'my-rm-projects',
+            handle: function handle(ctx) {
+                try {
+                    var login = ctx.currentUser && (ctx.currentUser.login || ctx.currentUser.name);
+                    log('my-rm-projects called by=' + login);
+
+                    // Read global registry of RM-enabled project shortNames (written by backend.js)
+                    var shortNamesRaw = ctx.globalStorage && ctx.globalStorage.extensionProperties && ctx.globalStorage.extensionProperties.rmProjectShortNames;
+                    log('  globalStorage.rmProjectShortNames=' + (shortNamesRaw || 'NOT SET'));
+                    var shortNames = [];
+                    if (shortNamesRaw) {
+                        try { shortNames = JSON.parse(shortNamesRaw); } catch (e) { shortNames = []; }
+                        if (!Array.isArray(shortNames)) { shortNames = []; }
+                    }
+
+                    var result = [];
+                    for (var i = 0; i < shortNames.length; i++) {
+                        try {
+                            var project = entities.Project.findByKey(shortNames[i]);
+                            if (!project) { continue; }
+                            // Check calendarViewers — only RM users are in this list
+                            var viewersJson = project.extensionProperties && project.extensionProperties.calendarViewers;
+                            if (!viewersJson) { continue; }
+                            var viewers = JSON.parse(viewersJson);
+                            if (Array.isArray(viewers) && login && viewers.indexOf(login) !== -1) {
+                                result.push({
+                                    id: project.shortName,
+                                    shortName: project.shortName,
+                                    name: project.name || project.shortName
+                                });
+                            }
+                        } catch (e) {
+                            log('  error checking project ' + shortNames[i] + ': ' + (e && e.message));
+                        }
+                    }
+
+                    log('my-rm-projects returning ' + result.length + ' project(s)');
+                    ctx.response.json(result);
+                } catch (error) {
+                    logError('Failed to get my-rm-projects', error);
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
+                }
+            }
+        },
+        /**
+         * POST /calendar-releases
+         * Body: { projects: Array<{ id: string, shortName: string }> }
+         * Returns releases stripped to calendar-essential fields for each permitted project.
+         */
+        {
+            method: 'POST',
+            path: 'calendar-releases',
+            handle: function handle(ctx) {
+                try {
+                    var payload = ctx.request.json();
+                    var projects = Array.isArray(payload.projects) ? payload.projects : [];
+                    var result = [];
+
+                    for (var i = 0; i < projects.length; i++) {
+                        var projectRef = projects[i];
+                        if (!projectRef || !projectRef.shortName) { continue; }
+                        try {
+                            var project = entities.Project.findByKey(projectRef.shortName);
+                            if (!project) { continue; }
+                            if (!(project.extensionProperties.calendarSnapshot || project.extensionProperties.releases)) { continue; }
+                            if (!isUserRmForProject(project, ctx.currentUser)) { continue; }
+                            var calendarReleases;
+                            var projectName = project.name || project.shortName || projectRef.shortName;
+                            var snapshotJson = project.extensionProperties && project.extensionProperties.calendarSnapshot;
+                            if (snapshotJson) {
+                                var snapshot = JSON.parse(snapshotJson);
+                                calendarReleases = snapshot.releases || [];
+                                projectName = snapshot.projectName || snapshot.projectShortName || projectName;
+                            } else {
+                                var rawReleases = JSON.parse(project.extensionProperties.releases);
+                                calendarReleases = rawReleases.map(function (r) {
+                                    return {
+                                        id: r.id,
+                                        version: r.version,
+                                        featureFreezeDate: r.featureFreezeDate !== undefined ? r.featureFreezeDate : null,
+                                        releaseDate: r.releaseDate,
+                                        status: r.status || 'Planning',
+                                        product: r.product || undefined
+                                    };
+                                });
+                            }
+                            result.push({
+                                projectId: projectRef.id,
+                                projectName: projectName,
+                                releases: calendarReleases
+                            });
+                        } catch (e) {
+                            // project not found or inaccessible — skip silently
+                        }
+                    }
+
+                    log('calendar-releases returning ' + result.length + ' projects, total releases=' + result.reduce(function(s,p){ return s + (p.releases ? p.releases.length : 0); }, 0));
+                    ctx.response.json(result);
+                } catch (error) {
+                    logError('Failed to get calendar releases', error);
                     sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
                 }
             }

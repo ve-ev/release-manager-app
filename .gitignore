@@ -25,3 +25,9 @@ dist-ssr
 
 # Build artifacts
 *.zip
+
+# Git worktrees
+.worktrees/
+
+# Superpowers design docs
+docs/

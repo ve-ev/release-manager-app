@@ -35,6 +35,17 @@ import {
 export const host = await YTApp.register();
 // eslint-disable-next-line react-refresh/only-export-components
 export const api = new API(host);
+// Register this project in the server-side RM project registry on app load.
+// Only succeeds if user is a Release Manager — 403 for others, silently ignored.
+(async () => {
+  try {
+    if (YTApp.entity?.type === 'project') {
+      await api.refreshCalendarData();
+    }
+  } catch {
+    // Non-critical
+  }
+})();
 
 
 const AppComponent: React.FunctionComponent = () => {
@@ -93,6 +104,7 @@ const AppComponent: React.FunctionComponent = () => {
   const { releaseVersions, loading, error, refetch: fetchReleaseVersions } = useReleaseVersions(api, {
     onBackgroundMembershipChange: handleWorkflowMembershipChange
   });
+
 
   const syncVersionBundleElement = useCallback(async (
     version: string,
@@ -239,6 +251,7 @@ const AppComponent: React.FunctionComponent = () => {
         releasing ? (item.featureFreezeDate || null) : null,
         releasing
       ).catch(e => logger.error('Failed to sync bundle element on status change', e));
+      api.refreshCalendarData().catch(() => { /* non-critical */ });
     } catch (e) {
       logger.error('Failed to change release status', e);
     } finally {
@@ -294,6 +307,7 @@ const AppComponent: React.FunctionComponent = () => {
 
       // Refresh release versions and close form
       await fetchReleaseVersions();
+      api.refreshCalendarData().catch(() => { /* non-critical */ });
       setShowForm(false);
       setCurrentReleaseVersion(undefined);
       // Important: reset meta-issue auto-open flag after save to avoid leaking into next form opening
@@ -322,6 +336,7 @@ const AppComponent: React.FunctionComponent = () => {
       await api.deleteReleaseVersion(confirmDeleteId);
       setAlertMessage('Release version deleted successfully');
       await fetchReleaseVersions();
+      api.refreshCalendarData().catch(() => { /* non-critical */ });
     // eslint-disable-next-line no-catch-shadow,no-shadow
     } catch (error) {
       // Show error as alert message instead of setting error state

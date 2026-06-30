@@ -56,6 +56,15 @@
   max-width: 760px;
   color: var(--ring-secondary-color);
   font-weight: normal;
+  text-wrap: pretty;
+}
+
+.empty-state-text h1 {
+  text-wrap: balance;
+}
+
+.empty-state-tips h4 {
+  text-wrap: balance;
 }
 
 /* Decorative shadows behind the text card */

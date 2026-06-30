@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import {resolve} from 'node:path';
 import {defineConfig} from 'vite';
 import {viteStaticCopy} from 'vite-plugin-static-copy';
@@ -50,7 +51,7 @@ export default defineConfig({
       input: {
         // List every widget entry point here
         releaseManagerPage: resolve(__dirname, 'src/widgets/release-manager-page/index.html'),
-
+        releaseCalendar: resolve(__dirname, 'src/widgets/release-calendar/index.html'),
       },
       output: {
         manualChunks(id): string | undefined {
@@ -75,5 +76,10 @@ export default defineConfig({
         }
       }
     }
+  },
+  test: {
+    environment: 'node',
+    globals: true,
+    include: ['widgets/**/__tests__/**/*.test.ts']
   }
 });

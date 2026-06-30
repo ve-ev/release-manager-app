@@ -355,11 +355,18 @@
   margin-bottom: 3px;
   border-radius: 3px;
   cursor: pointer;
-  min-height: calc(var(--ring-unit) * 3);
+  min-height: calc(var(--ring-unit) * 5);
+  transition-property: background-color, transform;
+  transition-duration: 0.15s;
+  transition-timing-function: ease-out;
 }
 
 .linked-issue-item:hover {
   background-color: var(--ring-hover-background-color);
+}
+
+.linked-issue-item:active {
+  transform: scale(0.96);
 }
 
 .linked-issue-id {
@@ -505,6 +512,7 @@
   font-size: var(--ring-font-size);
   font-weight: 600;
   color: var(--ring-text-color);
+  text-wrap: balance;
 }
 
 .version-description-content,
@@ -513,6 +521,7 @@
   line-height: var(--ring-line-height);
   color: var(--ring-text-color);
   padding: 0;
+  text-wrap: pretty;
 }
 
 /* Match banner description p styling */
@@ -554,6 +563,7 @@
   white-space: nowrap; /* ensure date stays on one line */
   position: relative; /* enable stacking over following cell when needed */
   z-index: 2;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Status tag with freeze indicator */
@@ -644,6 +654,13 @@
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 0 var(--ring-unit);
+  transition-property: background-color, transform;
+  transition-duration: 0.15s;
+  transition-timing-function: ease-out;
+}
+
+.version-list-header-cell.sortable:active {
+  transform: scale(0.96);
 }
 
 .version-list-header-cell.sortable .header-label {
@@ -733,6 +750,7 @@
   font-size: var(--ring-font-size);
   font-weight: 600;
   color: var(--ring-text-color);
+  text-wrap: balance;
 }
 
 .version-freeze-content,
@@ -742,6 +760,7 @@
   line-height: var(--ring-line-height);
   color: var(--ring-text-color);
   padding: 0;
+  text-wrap: pretty;
 }
 
 .version-description-content a,

@@ -3,8 +3,8 @@
   "title": "Release Manager",
   "description": "Plan, track, and communicate product releases with version management, progress tracking, and release notes generation.",
   "$schema": "https://json.schemastore.org/youtrack-app.json",
-  "version": "1.2.3",
-  "changeNotes": "<h3>Version 1.2.3</h3>\n<ul>\n  <li><b>Fix:</b> Version field date/released-flag sync now works for all projects regardless of project ID format or bundle type (global vs independent copy)</li>\n  <li><b>Fix:</b> Bundle element lookup no longer silently truncates at ~42 elements — uses explicit $top=1000</li>\n  <li><b>Fix:</b> Sync logs now appear in the YouTrack App Technical Log instead of the browser console</li>\n</ul>\n<h3>Version 1.2.2</h3>\n<ul>\n  <li><b>Fix:</b> Sync release date and start date to version custom field bundle value when creating or editing a release</li>\n  <li><b>Fix:</b> Sync Released flag to version custom field when marking a release as Released or reverting</li>\n  <li><b>Fix:</b> Released and Archived columns now show correctly in the import versions table</li>\n  <li><b>Fix:</b> Start date (feature freeze date) included in import and export to version custom fields</li>\n  <li><b>Fix:</b> Planned issues’ custom field values are cleared when a release version is deleted</li>\n</ul>\n<h3>Version 1.2.1</h3>\n<ul>\n  <li><b>Fix:</b> Updated widget extension point to PROJECT_TAB for correct placement in YouTrack</li>\n</ul>\n<h3>Version 1.2.0</h3>\n<ul>\n  <li><b>Feature:</b> Allow using multi-select custom fields in mapping</li>\n  <li><b>Feature:</b> Import custom field values as releases into the app</li>\n</ul>",
+  "version": "1.3.0",
+  "changeNotes": "<h3>Version 1.3.0</h3>\n<ul>\n  <li><b>Feature:</b> Release Calendar dashboard widget — visualize release and feature freeze dates across multiple projects on a single calendar view (month, quarter, and year views)</li>\n</ul>\n<h3>Version 1.2.3</h3>\n<ul>\n  <li><b>Fix:</b> Version field date/released-flag sync now works for all projects regardless of project ID format or bundle type (global vs independent copy)</li>\n  <li><b>Fix:</b> Bundle element lookup no longer silently truncates at ~42 elements — uses explicit $top=1000</li>\n  <li><b>Fix:</b> Sync logs now appear in the YouTrack App Technical Log instead of the browser console</li>\n</ul>\n<h3>Version 1.2.2</h3>\n<ul>\n  <li><b>Fix:</b> Sync release date and start date to version custom field bundle value when creating or editing a release</li>\n  <li><b>Fix:</b> Sync Released flag to version custom field when marking a release as Released or reverting</li>\n  <li><b>Fix:</b> Released and Archived columns now show correctly in the import versions table</li>\n  <li><b>Fix:</b> Start date (feature freeze date) included in import and export to version custom fields</li>\n  <li><b>Fix:</b> Planned issues’ custom field values are cleared when a release version is deleted</li>\n</ul>\n<h3>Version 1.2.1</h3>\n<ul>\n  <li><b>Fix:</b> Updated widget extension point to PROJECT_TAB for correct placement in YouTrack</li>\n</ul>\n<h3>Version 1.2.0</h3>\n<ul>\n  <li><b>Feature:</b> Allow using multi-select custom fields in mapping</li>\n  <li><b>Feature:</b> Import custom field values as releases into the app</li>\n</ul>",
   "vendor": {
     "name": "E.V",
     "url": "https://github.com/ve-ev/release-manager-app"
@@ -17,6 +17,14 @@
       "indexPath": "release-manager-page/index.html",
       "extensionPoint": "PROJECT_TAB",
       "iconPath": "release-manager-page/widget-icon.svg",
+      "permissions": []
+    },
+    {
+      "key": "release-calendar",
+      "name": "Release Calendar",
+      "indexPath": "release-calendar/index.html",
+      "extensionPoint": "DASHBOARD_WIDGET",
+      "settingsSchemaPath": "release-calendar/settings-schema.json",
       "permissions": []
     }
   ],
