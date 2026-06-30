@@ -20,6 +20,7 @@ interface OnboardingStepProps {
   actionLabel: string;
   onClick: () => void;
   enabled: boolean;
+  primary?: boolean;
 }
 
 const OnboardingStep: React.FC<OnboardingStepProps> = ({
@@ -29,6 +30,7 @@ const OnboardingStep: React.FC<OnboardingStepProps> = ({
   actionLabel,
   onClick,
   enabled,
+  primary,
 }) => (
   <div className={`onboarding-step${enabled ? '' : ' onboarding-step--locked'}`}>
     <div className="onboarding-step-badge">{number}</div>
@@ -40,6 +42,7 @@ const OnboardingStep: React.FC<OnboardingStepProps> = ({
       className="onboarding-step-action"
       onClick={onClick}
       disabled={!enabled}
+      primary={primary && enabled}
     >
       {actionLabel}
     </Button>
@@ -82,6 +85,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
             actionLabel="Create Release"
             onClick={onAddRelease}
             enabled={canCreate && isConfigured}
+            primary
           />
         </div>
       </section>
