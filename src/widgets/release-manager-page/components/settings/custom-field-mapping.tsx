@@ -1,17 +1,36 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Input from '@jetbrains/ring-ui-built/components/input/input';
 import Checkbox from '@jetbrains/ring-ui-built/components/checkbox/checkbox';
 import {H3} from '@jetbrains/ring-ui-built/components/heading/heading';
 import Tooltip from '@jetbrains/ring-ui-built/components/tooltip/tooltip';
 import {AppSettings} from '../../interfaces';
+import {API} from '../../api';
 
 interface Props {
   settings: AppSettings;
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
+  api: API;
 }
 
-export const CustomFieldMapping: React.FC<Props> = ({ settings, setSettings }) => {
+export const CustomFieldMapping: React.FC<Props> = ({ settings, setSettings, api }) => {
   const mapping = settings.customFieldMapping;
+  const [availableFields, setAvailableFields] = useState<Array<{ name: string; localizedName: string | null }>>([]);
+  const [fieldsLoaded, setFieldsLoaded] = useState(false);
+
+  useEffect(() => {
+    api.listProjectVersionFields().then(fields => {
+      setAvailableFields(fields);
+      setFieldsLoaded(true);
+    }).catch(() => setFieldsLoaded(true));
+  }, [api]);
+
+  const configuredName = mapping?.plannedReleaseField || '';
+  const lowerConfigured = configuredName.toLowerCase();
+  const fieldMatch = availableFields.find(f =>
+    f.name.toLowerCase() === lowerConfigured ||
+    (f.localizedName && f.localizedName.toLowerCase() === lowerConfigured)
+  );
+  const showMismatchHint = fieldsLoaded && configuredName && !fieldMatch && availableFields.length > 0;
 
   return (
     <div className="settings-field custom-field-mapping">
@@ -34,7 +53,7 @@ export const CustomFieldMapping: React.FC<Props> = ({ settings, setSettings }) =
       <label className={'bold-label'} htmlFor="plannedReleaseField">Release Field</label>
       <Input
         id="plannedReleaseField"
-        value={mapping?.plannedReleaseField || ''}
+        value={configuredName}
         onChange={e => {
           const value = e.target.value;
           setSettings(prev => ({
@@ -45,8 +64,40 @@ export const CustomFieldMapping: React.FC<Props> = ({ settings, setSettings }) =
             }
           }));
         }}
-        placeholder="e.g., Release Version"
+        placeholder="e.g., Fix versions"
       />
+
+      {showMismatchHint && (
+        <div className="field-help" style={{ marginTop: '4px', padding: '6px 8px', backgroundColor: '#fff8e1', borderLeft: '3px solid #ff9800', color: '#5d4037' }}>
+          <strong>⚠️ Field not found.</strong> Enter the REST API name, not the localised display name.
+          {availableFields.length > 0 && (
+            <>
+              {' '}Available bundle fields:
+              <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                {availableFields.map(f => (
+                  <li key={f.name} style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                    onClick={() => setSettings(prev => ({
+                      ...prev,
+                      customFieldMapping: { ...prev.customFieldMapping, plannedReleaseField: f.name }
+                    }))}>
+                    <strong>{f.name}</strong>
+                    {f.localizedName && f.localizedName !== f.name && (
+                      <span style={{ color: '#888', marginLeft: 4 }}>({f.localizedName})</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+
+      {fieldMatch && fieldMatch.localizedName && fieldMatch.localizedName !== fieldMatch.name && (
+        <div className="field-help" style={{ marginTop: '4px', color: '#888' }}>
+          Localised as &ldquo;{fieldMatch.localizedName}&rdquo; in your YouTrack instance.
+        </div>
+      )}
+
       <div className="field-help">Name of the custom field that stores the planned release value.</div>
 
       {mapping?.plannedReleaseField && (

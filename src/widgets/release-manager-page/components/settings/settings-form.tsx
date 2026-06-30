@@ -168,7 +168,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose, onOpenIm
                 <>
                   <div className="settings-separator" role="separator" aria-orientation="vertical"/>
                   <div className="settings-column right">
-                    <CustomFieldMapping settings={settings} setSettings={setSettings}/>
+                    <CustomFieldMapping settings={settings} setSettings={setSettings} api={api}/>
                     {settings.customFieldMapping?.plannedReleaseField && (
                       <>
                         <div className="settings-separator horizontal" role="separator" aria-orientation="horizontal"/>

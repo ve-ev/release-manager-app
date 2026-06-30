@@ -226,21 +226,52 @@ export class API {
     const projectId = YTApp.entity?.type === 'project' ? (YTApp.entity.id || '') : '';
     if (!projectId) { return; }
 
+    // Step 0: resolve the canonical field name via the App SDK backend. The App SDK's
+    // findFieldByName() handles localised display names (e.g. German "Beheben in" →
+    // canonical REST API name "Fix versions"), closing the gap between what the user
+    // types in settings and what the YouTrack REST API exposes as field.name.
+    let resolvedFieldId: string | null = null;
+    let resolvedBundleId: string | null = null;
+    const lowerFieldNames = new Set([fieldName.toLowerCase()]);
+    try {
+      const info = await this.fetchJson<{
+        found: boolean;
+        canonicalName?: string;
+        fieldId?: string | null;
+        bundleId?: string | null;
+      }>(`backend/field-bundle-info?fieldName=${encodeURIComponent(fieldName)}`);
+      if (info?.found) {
+        if (info.canonicalName) { lowerFieldNames.add(info.canonicalName.toLowerCase()); }
+        if (info.fieldId) { resolvedFieldId = info.fieldId; }
+        if (info.bundleId) { resolvedBundleId = info.bundleId; }
+      }
+      logger.debug('syncVersionBundleElement: field-bundle-info', { found: info?.found, canonicalName: info?.canonicalName, fieldId: info?.fieldId, bundleId: info?.bundleId });
+    } catch (e) {
+      logger.debug('syncVersionBundleElement: field-bundle-info lookup failed, proceeding with REST API name match only');
+    }
+
     // Step 1: fetch bundle ID only (no nested values — avoids YouTrack REST default ~42-element
     // cap; $top=1000 matches step 2 for consistency). Request bundle via both projections:
     //   bundle(id)             — project-specific bundle (correct for independent copies)
-    //   field(id,name,bundle(id)) — global field definition's bundle (fallback for global bundles
-    //                             where the direct property may not be returned by some versions)
+    //   field(id,name,localizedName,bundle(id)) — also request the localised display name (e.g.
+    //     "Beheben in" for "Fix versions" on German instances; supported in YouTrack 2022.1+)
     const customFields = await this.host.fetchYouTrack<Array<{
-      field: { name: string; bundle?: { id: string } | null } | null;
+      id: string;
+      field: { id: string; name: string; localizedName?: string | null; bundle?: { id: string } | null } | null;
       bundle: { id: string } | null;
-    }>>(`admin/projects/${encodeURIComponent(projectId)}/customFields?fields=id,field(id,name,bundle(id)),bundle(id)&$top=1000`);
+    }>>(`admin/projects/${encodeURIComponent(projectId)}/customFields?fields=id,field(id,name,localizedName,bundle(id)),bundle(id)&$top=1000`);
 
-    const lowerFieldName = fieldName.toLowerCase();
-    const matched = (customFields || []).find(f => f.field?.name?.toLowerCase() === lowerFieldName);
+    // Match by canonical name, localised name (e.g. "Beheben in" == "Fix versions" in German),
+    // or by field ID from the App SDK backend — whichever resolves first.
+    const matched = (customFields || []).find(f => {
+      const n = f.field?.name?.toLowerCase() ?? '';
+      const ln = f.field?.localizedName?.toLowerCase() ?? '';
+      return lowerFieldNames.has(n) || (ln && lowerFieldNames.has(ln)) ||
+        (resolvedFieldId != null && (f.id === resolvedFieldId || f.field?.id === resolvedFieldId));
+    });
     // Prefer project-specific bundle (independent copy); fall back to global field bundle.
-    const bundleId = matched?.bundle?.id || matched?.field?.bundle?.id;
-;
+    // Also use bundleId returned directly by the App SDK if the REST API match failed.
+    const bundleId = matched?.bundle?.id || matched?.field?.bundle?.id || resolvedBundleId;
     if (!bundleId) { return; }
 
     // Step 2: fetch all elements with explicit $top=1000 (YouTrack's implicit cap is ~42).
@@ -262,6 +293,24 @@ export class API {
       `admin/customFieldSettings/bundles/version/${encodeURIComponent(bundleId)}/values/${encodeURIComponent(elementId)}?fields=id,name,releaseDate,startDate,released`,
       { method: 'POST', body }
     );
+  }
+
+  /** Returns version-bundle custom fields for the current project with canonical and localised names. */
+  async listProjectVersionFields(): Promise<Array<{ name: string; localizedName: string | null }>> {
+    const projectId = YTApp.entity?.type === 'project' ? (YTApp.entity.id || '') : '';
+    if (!projectId) { return []; }
+    try {
+      const fields = await this.host.fetchYouTrack<Array<{
+        field: { name: string; localizedName?: string | null; fieldType?: { id?: string } | null; bundle?: { id: string } | null } | null;
+        bundle: { id: string } | null;
+      }>>(`admin/projects/${encodeURIComponent(projectId)}/customFields?fields=id,field(id,name,localizedName,fieldType(id),bundle(id)),bundle(id)&$top=1000`);
+      return (fields || [])
+        .filter(f => f.bundle?.id || f.field?.bundle?.id) // only bundle-type fields
+        .map(f => ({ name: f.field?.name ?? '', localizedName: f.field?.localizedName ?? null }))
+        .filter(f => f.name);
+    } catch {
+      return [];
+    }
   }
 
   async getVersionFieldValues(fieldName: string): Promise<{ fieldName: string; values: Array<{ name: string; releaseDate: string | null; startDate: string | null; isReleased: boolean; isArchived: boolean }> }> {
