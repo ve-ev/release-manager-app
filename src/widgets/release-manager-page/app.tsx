@@ -513,7 +513,7 @@ const AppComponent: React.FunctionComponent = () => {
               {permissions.canCreate && !showEmpty && (
                 <Button primary onClick={handleAddReleaseVersion}>Add Release Version</Button>
               )}
-              {permissions.canAccessSettings && (
+              {permissions.canAccessSettings && !showEmpty && (
                 <Button
                   className="progress-settings-button"
                   onClick={() => setShowSettings(true)}
