@@ -12,43 +12,11 @@
   width: 100%;
   text-align: center;
   background: var(--ring-content-background-color);
-  border-radius: var(--ring-border-radius);
+  border-radius: var(--ring-border-radius-large, 8px);
   padding: calc(var(--ring-unit) * 4);
   box-shadow: var(--ring-popup-shadow);
 }
 
-.empty-state-actions {
-  display: flex;
-  gap: calc(var(--ring-unit) * 2);
-  margin-top: calc(var(--ring-unit) * 2);
-  justify-content: center;
-}
-
-.empty-state-tips {
-  margin-top: calc(var(--ring-unit) * 4);
-  color: var(--ring-secondary-color);
-  text-align: center;
-  /* Match heading-like appearance for both header and list */
-  font-size: 12px;
-}
-
-/* Make the Tips header closer to the list and visually unified */
-.empty-state-tips h4 {
-  margin: 0; /* remove default bottom margin */
-}
-
-.empty-state-tips-list {
-  margin-top: calc(var(--ring-unit) * 1); /* closer to header */
-  display: inline-block; /* center the list while keeping bullet alignment */
-  text-align: left;
-  padding-left: calc(var(--ring-unit) * 3);
-  font-size: inherit; /* same font as header */
-  font-weight: inherit; /* same font weight as header */
-}
-
-.empty-state-tips-list li {
-  margin: calc(var(--ring-unit) * 0.5) 0;
-}
 
 .empty-state-subtitle {
   /* more space before actions */
@@ -120,13 +88,14 @@
   gap: calc(var(--ring-unit) * 2);
   padding: calc(var(--ring-unit) * 1.5) calc(var(--ring-unit) * 2);
   background: var(--ring-sidebar-background-color);
-  border-radius: var(--ring-border-radius);
+  border-radius: calc(var(--ring-border-radius-large, 8px) - 4px);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.06),
     0 0 0 1px rgba(0, 0, 0, 0.05);
   animation: empty-state-enter 0.3s cubic-bezier(0.2, 0, 0, 1) both;
   transition-property: opacity;
   transition-duration: 0.2s;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
 .onboarding-step:nth-child(1) { animation-delay: 160ms; }
@@ -151,6 +120,7 @@
   line-height: 1;
   transition-property: background;
   transition-duration: 0.2s;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
 .onboarding-step--locked .onboarding-step-badge {
@@ -187,4 +157,5 @@
   transform: scale(0.96);
   transition-property: transform;
   transition-duration: 0.1s;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
