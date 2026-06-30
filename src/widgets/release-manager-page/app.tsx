@@ -445,6 +445,7 @@ const AppComponent: React.FunctionComponent = () => {
         <EmptyState
           canCreate={permissions.canCreate}
           canAccessSettings={permissions.canAccessSettings}
+          isConfigured={hasProducts || hasProgress}
           onAddRelease={handleAddReleaseVersion}
           onOpenSettings={() => setShowSettings(true)}
         />
