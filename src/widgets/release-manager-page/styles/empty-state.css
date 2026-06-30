@@ -87,3 +87,104 @@
   bottom: -36px;
   opacity: 0.9;
 }
+
+/* ── Onboarding tour ───────────────────────────── */
+
+@keyframes empty-state-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Stagger the heading, subtitle, and each step on mount */
+.empty-state-text h1 {
+  animation: empty-state-enter 0.3s cubic-bezier(0.2, 0, 0, 1) both;
+  animation-delay: 0ms;
+}
+
+.empty-state-subtitle {
+  animation: empty-state-enter 0.3s cubic-bezier(0.2, 0, 0, 1) both;
+  animation-delay: 80ms;
+}
+
+.onboarding-steps {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--ring-unit) * 1.5);
+  margin-top: calc(var(--ring-unit) * 3);
+  text-align: left;
+}
+
+.onboarding-step {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--ring-unit) * 2);
+  padding: calc(var(--ring-unit) * 1.5) calc(var(--ring-unit) * 2);
+  background: var(--ring-sidebar-background-color);
+  border-radius: var(--ring-border-radius);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  animation: empty-state-enter 0.3s cubic-bezier(0.2, 0, 0, 1) both;
+  transition-property: opacity;
+  transition-duration: 0.2s;
+}
+
+.onboarding-step:nth-child(1) { animation-delay: 160ms; }
+.onboarding-step:nth-child(2) { animation-delay: 240ms; }
+
+.onboarding-step--locked {
+  opacity: 0.55;
+}
+
+.onboarding-step-badge {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--ring-main-color);
+  color: var(--ring-white-text-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  transition-property: background;
+  transition-duration: 0.2s;
+}
+
+.onboarding-step--locked .onboarding-step-badge {
+  background: var(--ring-secondary-color);
+}
+
+.onboarding-step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.onboarding-step-title {
+  font-weight: 600;
+  font-size: var(--ring-font-size);
+  color: var(--ring-text-color);
+  text-wrap: balance;
+  margin: 0 0 2px;
+}
+
+.onboarding-step-description {
+  font-size: var(--ring-font-size-smaller);
+  color: var(--ring-secondary-color);
+  text-wrap: pretty;
+  margin: 0;
+}
+
+.onboarding-step-action {
+  flex-shrink: 0;
+  min-height: 40px;
+}
+
+/* Scale on press — only when enabled */
+.onboarding-step-action:not([disabled]):active {
+  transform: scale(0.96);
+  transition-property: transform;
+  transition-duration: 0.1s;
+}
