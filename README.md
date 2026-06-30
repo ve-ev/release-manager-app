@@ -5,6 +5,8 @@ A [YouTrack](https://www.jetbrains.com/youtrack/) app for planning, tracking, an
 [![JetBrains Plugin](https://img.shields.io/badge/JetBrains_Marketplace-Release_Manager-blue)](https://plugins.jetbrains.com/plugin/28255-release-manager)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+![Release Manager — two widgets overview](screenshots/landing.png)
+
 ## Features
 
 - **Release Versions** — Create and manage releases with version, status, dates, tags, and descriptions
