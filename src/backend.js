@@ -1704,6 +1704,41 @@ exports.httpHandler = {
             }
         },
         {
+            // Resolves a custom field by name using the App SDK (which handles localised display
+            // names). Returns the canonical field name and ID so the frontend can match the field
+            // in the YouTrack REST API regardless of the locale the user configured.
+            method: 'GET',
+            path: 'field-bundle-info',
+            scope: 'project',
+            handle: function handle(ctx) {
+                try {
+                    const fieldName = ctx.request.getParameter('fieldName');
+                    if (!fieldName) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'fieldName parameter is required');
+                        return;
+                    }
+                    const field = ctx.project.findFieldByName(fieldName);
+                    if (!field) {
+                        ctx.response.json({ found: false });
+                        return;
+                    }
+                    let fieldId = null;
+                    let bundleId = null;
+                    try { fieldId = field.id || null; } catch(e) {}
+                    try { bundleId = (field.bundle && field.bundle.id) || null; } catch(e) {}
+                    ctx.response.json({
+                        found: true,
+                        canonicalName: field.name || fieldName,
+                        fieldId: fieldId,
+                        bundleId: bundleId
+                    });
+                } catch (error) {
+                    logError('Failed to get field bundle info', error);
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
+                }
+            }
+        },
+        {
             method: 'POST',
             path: 'custom-field-set',
             scope: 'project',

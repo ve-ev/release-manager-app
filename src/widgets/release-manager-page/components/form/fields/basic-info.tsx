@@ -48,7 +48,7 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
   const isCustomFieldMode = appConfig.customFieldsMapping && !!fieldName && useExistingFieldValues;
 
   // Version field options state
-  const [versionOptions, setVersionOptions] = useState<Array<{name: string; releaseDate: string | null; isReleased: boolean; isArchived: boolean}>>([]);
+  const [versionOptions, setVersionOptions] = useState<Array<{name: string; releaseDate: string | null; startDate: string | null; isReleased: boolean; isArchived: boolean}>>([]);
   const [versionMode, setVersionMode] = useState<VersionMode>('select');
 
   // Fetch version field values when custom field mode is active
@@ -156,11 +156,14 @@ const BasicInfo: React.FC<BasicInfoProps> = ({
     } as React.ChangeEvent<HTMLInputElement>;
     handleInputChange(syntheticEvent);
 
-    // Auto-set release date from custom field value if present
+    // Auto-set release date and feature freeze date from custom field value if present
     if (selected) {
       const match = versionOptions.find(v => v.name === selected.key);
       if (match?.releaseDate) {
         handleDateChange('releaseDate')(new Date(match.releaseDate));
+      }
+      if (match?.startDate) {
+        handleDateChange('featureFreezeDate')(new Date(match.startDate));
       }
     }
   }, [handleInputChange, handleDateChange, versionOptions]);
