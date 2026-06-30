@@ -21,6 +21,7 @@ interface OnboardingStepProps {
   onClick: () => void;
   enabled: boolean;
   primary?: boolean;
+  completed?: boolean;
 }
 
 const OnboardingStep: React.FC<OnboardingStepProps> = ({
@@ -31,9 +32,10 @@ const OnboardingStep: React.FC<OnboardingStepProps> = ({
   onClick,
   enabled,
   primary,
+  completed,
 }) => (
-  <div className={`onboarding-step${enabled ? '' : ' onboarding-step--locked'}`}>
-    <div className="onboarding-step-badge">{number}</div>
+  <div className={`onboarding-step${enabled ? '' : ' onboarding-step--locked'}${completed ? ' onboarding-step--completed' : ''}`}>
+    <div className="onboarding-step-badge">{completed ? '✓' : number}</div>
     <div className="onboarding-step-content">
       <div className="onboarding-step-title">{title}</div>
       <div className="onboarding-step-description">{description}</div>
@@ -77,6 +79,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
             actionLabel="Open Settings"
             onClick={onOpenSettings}
             enabled={canAccessSettings}
+            completed={isConfigured}
           />
           <OnboardingStep
             number={2}

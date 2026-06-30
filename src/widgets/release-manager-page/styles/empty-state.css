@@ -127,6 +127,10 @@
   background: var(--ring-secondary-color);
 }
 
+.onboarding-step--completed .onboarding-step-badge {
+  background: var(--ring-icon-success-color);
+}
+
 .onboarding-step-content {
   flex: 1;
   min-width: 0;
@@ -150,6 +154,7 @@
 .onboarding-step-action {
   flex-shrink: 0;
   min-height: 40px;
+  min-width: 128px;
 }
 
 /* Scale on press — only when enabled */
