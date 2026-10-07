@@ -90,12 +90,12 @@ export function useReleaseVersions(api: API, options?: UseReleaseVersionsOptions
 
   const onBackgroundMembershipChange = options && options.onBackgroundMembershipChange;
 
-  // Fetch release versions from backend
+  // Fetch release versions from backend. `loading` is true only until the first load ends:
+  // a refresh keeps the table mounted and replaces only the releases that changed.
   const fetchReleaseVersions = useCallback(async () => {
-    setLoading(true);
     try {
       const result = await api.getReleaseVersions();
-      setReleaseVersions(result);
+      setReleaseVersions(prev => reconcileReleaseVersions(prev, result));
       setError(null);
     } catch (err) {
       setError('Failed to load release versions');
