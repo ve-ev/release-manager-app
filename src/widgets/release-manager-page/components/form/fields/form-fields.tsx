@@ -21,6 +21,7 @@ interface FormFieldsProps {
   releaseDateError?: string;
   plannedIssuesExtraAction?: React.ReactNode;
   plannedIssuesReplacement?: React.ReactNode;
+  autoAttachFilter?: React.ReactNode;
   onEditMetaIssue?: (issue: PlannedOrMetaIssue, index: number) => void;
   existingReleaseVersions?: ReleaseVersion[];
 }
@@ -54,6 +55,7 @@ const FormFields: React.FC<FormFieldsProps> = (props) => (
         searchError={props.searchError}
         extraAction={props.plannedIssuesExtraAction}
         onEditMetaIssue={props.onEditMetaIssue}
+        autoAttachFilter={props.autoAttachFilter}
       />
     )}
 

@@ -18,6 +18,7 @@ import {EmptyState} from './components/empty-state.tsx';
 import {ErrorBoundary} from './components/error-boundary.tsx';
 import {API} from './api';
 import {logger} from './utils/logger';
+import {getBackendErrorMessage} from './utils/helpers';
 import './app.css';
 import {
   useReleaseVersions,
@@ -82,6 +83,7 @@ const AppComponent: React.FunctionComponent = () => {
   const [currentReleaseVersion, setCurrentReleaseVersion] = useState<ReleaseVersion | undefined>(undefined);
   const [initialShowMetaIssueForm, setInitialShowMetaIssueForm] = useState<boolean>(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [alertError, setAlertError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const workflowUpdatedNoticeShownRef = useRef(false);
@@ -213,6 +215,16 @@ const AppComponent: React.FunctionComponent = () => {
 
   useEffect(() => {
     const handler = ((e: Event) => {
+      const detail = (e as CustomEvent<{ message: string; isError?: boolean }>).detail;
+      if (!detail) { return; }
+      (detail.isError ? setAlertError : setAlertMessage)(detail.message);
+    }) as EventListener;
+    window.addEventListener('release-manager-alert', handler);
+    return () => window.removeEventListener('release-manager-alert', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = ((e: Event) => {
       const ce = e as CustomEvent<{ item: ReleaseVersion; newStatus: ReleaseVersion['status'] }>;
       const detail = ce?.detail;
       if (!detail) { return; }
@@ -315,7 +327,7 @@ const AppComponent: React.FunctionComponent = () => {
     // eslint-disable-next-line no-catch-shadow,no-shadow
     } catch (error) {
       logger.error('Failed to save release version:', error);
-      setAlertMessage('Failed to save release version. Please try again.');
+      setAlertError(getBackendErrorMessage(error, 'Failed to save release version. Please try again.'));
       // Don't rethrow - handle gracefully with user feedback
     }
   }, [fetchReleaseVersions, settings.customFieldMapping?.plannedReleaseField, config.customFieldsMapping, currentReleaseVersion, computeIssueChanges, handleCustomFieldUpdates, syncVersionBundleElement]);
@@ -542,6 +554,8 @@ const AppComponent: React.FunctionComponent = () => {
             metaIssuesEnabled={config.metaIssuesEnabled}
             initialShowMetaIssueForm={initialShowMetaIssueForm}
             existingReleaseVersions={releaseVersions}
+            autoAttachByFilter={config.autoAttachByFilter}
+            customFieldsMapping={config.customFieldsMapping}
           />
         </div>
       )}
@@ -579,6 +593,15 @@ const AppComponent: React.FunctionComponent = () => {
           timeout={3000}
         >
           {alertMessage}
+        </Alert>
+      )}
+
+      {alertError && (
+        <Alert
+          type={Alert.Type.ERROR}
+          onCloseRequest={() => setAlertError(null)}
+        >
+          {alertError}
         </Alert>
       )}
 

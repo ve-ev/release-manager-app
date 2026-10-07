@@ -204,13 +204,20 @@
   vertical-align: middle;
 }
 
-.issuesTable td:last-child {
-  /* Align action buttons container to the right and keep remove button pinned */
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: var(--ring-unit);
+.issuesTable td:first-child {
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.issuesTable td:last-child {
+  /* Stay a table cell (no flex) so row height and borders match the other columns */
+  text-align: right;
+  white-space: nowrap;
+}
+
+.issuesTable td:last-child > * + * {
+  margin-left: var(--ring-unit);
 }
 
 .issuesTable td:nth-child(2) {

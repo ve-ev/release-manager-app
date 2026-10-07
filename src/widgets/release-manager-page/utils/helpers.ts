@@ -228,3 +228,12 @@ export function renderMarkdownToSafeHtml(markdown?: string): string {
   });
 }
 
+
+/**
+ * Extracts the `{error}` message that backend endpoints return on failure.
+ * Assumes the host rejects with a Ring UI HTTPError that carries the parsed body in `data`.
+ */
+export function getBackendErrorMessage(error: unknown, fallback: string): string {
+  const data = (error as { data?: { error?: unknown } } | null)?.data;
+  return typeof data?.error === 'string' ? data.error : fallback;
+}

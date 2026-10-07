@@ -10,7 +10,8 @@ import {ReleaseVersion, AppSettings} from '../../interfaces';
 import {ProgressBar} from './progress/progress-bar';
 import {api} from '../../app';
 import type {ListDataItem} from '@jetbrains/ring-ui-built/components/list/list';
-import {useVersionProgress} from '../../hooks';
+import {useAppConfig, useVersionProgress} from '../../hooks';
+import {getBackendErrorMessage} from '../../utils/helpers';
 import {STATUS_DROPDOWN_OPTIONS} from '../../utils/constants';
 import type {IssueStatus} from '../../hooks/useIssueStatuses';
 
@@ -202,6 +203,24 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
       });
   }, [item]);
 
+  const config = useAppConfig(api);
+  const canSyncFilter = config.autoAttachByFilter && !config.customFieldsMapping && !!item.autoAttachQuery && canAddIssues;
+
+  const handleSyncFilter = useCallback(() => {
+    api.syncAutoAttach(item.id)
+      .then(({added, removed}) => {
+        window.dispatchEvent(new CustomEvent('release-versions-updated'));
+        window.dispatchEvent(new CustomEvent('release-manager-alert', {
+          detail: {message: `Filter synced: ${added} added, ${removed} removed`}
+        }));
+      })
+      .catch((error: unknown) => {
+        window.dispatchEvent(new CustomEvent('release-manager-alert', {
+          detail: {message: getBackendErrorMessage(error, 'Failed to sync the auto-attach filter'), isError: true}
+        }));
+      });
+  }, [item.id]);
+
   const handleViewAuditEvents = useCallback(() => {
     if (!isReleaseManager) {
       return;
@@ -300,6 +319,10 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
         items.push(createMenuItem('Add Issue', handleAddMetaIssueClick, 'add-issue-action'));
       }
 
+      if (canSyncFilter) {
+        items.push(createMenuItem('Sync now', handleSyncFilter, 'sync-filter-action'));
+      }
+
       if (showConfirmFreeze && isReleaseManager) {
         items.push(createMenuItem('Confirm Freeze', handleConfirmFreeze, 'confirm-freeze-action'));
       }
@@ -323,7 +346,7 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
     }
 
     return items;
-  }, [canSeeActions, canEditRelease, canAddIssues, canDelete, showConfirmFreeze, createMenuItem, handleEditClick, handleAddMetaIssueClick, handleConfirmFreeze, handleGenerateNotesClick, handleDeleteClick, handleViewAuditEvents, item.freezeConfirmed, item.status, isReleaseManager, handleUnfreeze]);
+  }, [canSeeActions, canEditRelease, canAddIssues, canSyncFilter, handleSyncFilter, canDelete, showConfirmFreeze, createMenuItem, handleEditClick, handleAddMetaIssueClick, handleConfirmFreeze, handleGenerateNotesClick, handleDeleteClick, handleViewAuditEvents, item.freezeConfirmed, item.status, isReleaseManager, handleUnfreeze]);
 
   // Memoize status tag element
   const statusTagElement = useMemo(() => (
@@ -399,6 +422,11 @@ export const VersionItemHeader: React.FC<VersionItemHeaderProps> = ({
       ) : null}
       <div className="version-list-cell version-cell">
         <div className="version-text">{item.version}</div>
+        {item.autoAttachLimitReached && (
+          <span className="auto-attach-limit" title="The auto-attach filter matches more issues than the limit. Make the filter narrower.">
+            Filter limit reached
+          </span>
+        )}
       </div>
       {showProgressColumn ? (
         <div className="version-list-cell progress-cell">

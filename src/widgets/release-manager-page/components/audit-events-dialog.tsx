@@ -164,7 +164,10 @@ const getDescriptionChangedPart = (ev: ReleaseAuditEvent): string => {
   return `description changed (${fromLen} → ${toLen} chars)"`;
 };
 
-const getByPart = (ev: ReleaseAuditEvent): string => ev.by ? `by ${ev.by}` : '';
+const getByPart = (ev: ReleaseAuditEvent): string => {
+  if (!ev.by) { return ''; }
+  return ev.triggeredBy ? `by ${ev.by} (triggered by ${ev.triggeredBy})` : `by ${ev.by}`;
+};
 
 const buildEventMetaText = (ev: ReleaseAuditEvent): string => {
   const parts = [
@@ -192,7 +195,9 @@ const buildEventKey = (ev: ReleaseAuditEvent): string => [
   (ev.removedPlannedIssueIds && ev.removedPlannedIssueIds.length) || 0,
   ev.plannedReordered ? '1' : '0',
   ev.fromDescription || '',
-  ev.toDescription || ''
+  ev.toDescription || '',
+  (ev.addedPlannedIssues || []).map(i => i.id).join(','),
+  (ev.removedPlannedIssues || []).map(i => i.id).join(',')
 ].join('|');
 
 interface AuditEventsDialogProps {
@@ -250,6 +255,9 @@ export const AuditEventsDialog: React.FC<AuditEventsDialogProps> = ({open, versi
                       {renderDescriptionDiffBlock(ev)}
 
                       {renderIssuesBlock('Planned issues', ev.plannedIssuesSnapshot)}
+
+                      {ev.type === 'AUTO_ATTACHED' ? renderIssuesBlock('Attached issues', ev.addedPlannedIssues) : null}
+                      {ev.type === 'AUTO_DETACHED' ? renderIssuesBlock('Detached issues', ev.removedPlannedIssues) : null}
 
                       {ev.type === 'PLANNED_ISSUES_CHANGED' ? (
                         <>
