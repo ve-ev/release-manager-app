@@ -1,7 +1,7 @@
 {
   "name": "release-manager",
   "title": "Release Manager",
-  "description": "Plan, track, and communicate product releases with version management, progress tracking, and release notes generation.",
+  "description": "Plan, track, and communicate product releases in YouTrack. A project tab lists release versions with planned issues, progress bars, feature freeze, release notes, and an audit trail. A Release Calendar dashboard widget shows freeze and release dates across projects. Release Managers and Light Release Managers get different rights. Two optional workflows sync releases with a custom field or attach issues by a search filter.",
   "$schema": "https://json.schemastore.org/youtrack-app.json",
   "version": "1.4.0",
   "minYouTrackVersion": "2026.2.0",

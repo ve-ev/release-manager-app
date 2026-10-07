@@ -144,8 +144,15 @@ function getReleaseVersions(ctx) {
  * @param {Array} releaseVersions - Array of release versions to save
  * @returns {boolean} True if successful, false otherwise
  */
+const MAX_AUDIT_EVENTS_PER_RELEASE = 200;
+
 function saveReleaseVersions(ctx, releaseVersions) {
     try {
+        releaseVersions.forEach(function (rv) {
+            if (!rv || !Array.isArray(rv.auditEvents) || rv.auditEvents.length <= MAX_AUDIT_EVENTS_PER_RELEASE) { return; }
+            // ponytail: keeps the newest events only; keep milestone events (freeze, status) too if old ones are needed
+            rv.auditEvents = rv.auditEvents.slice(-MAX_AUDIT_EVENTS_PER_RELEASE);
+        });
         ctx.project.extensionProperties.releases = JSON.stringify(releaseVersions);
         return true;
     } catch (error) {
@@ -155,8 +162,7 @@ function saveReleaseVersions(ctx, releaseVersions) {
 }
 
 /**
- * Writes a calendar snapshot to extension properties for use by the global backend.
- * Stores simplified release data + current user's login in the authorized viewers list.
+ * Writes a calendar snapshot (simplified release data) to extension properties for use by the global backend.
  * @param {Object} ctx
  * @param {Array} releases
  */
@@ -179,31 +185,12 @@ function persistCalendarSnapshot(ctx, releases) {
             projectName: ctx.project.name || ctx.project.shortName || '',
             releases: calendarReleases
         };
-        ctx.project.extensionProperties.calendarSnapshot = JSON.stringify(snapshot);
-
-        // Only add confirmed Release Managers to calendarViewers
-        if (isReleaseManager(ctx)) {
-            const viewersJson = ctx.project.extensionProperties.calendarViewers;
-            let viewers = viewersJson ? JSON.parse(viewersJson) : [];
-            if (!Array.isArray(viewers)) { viewers = []; }
-            const login = ctx.currentUser && (ctx.currentUser.login || ctx.currentUser.name);
-            if (login && viewers.indexOf(login) === -1) {
-                viewers.push(login);
-                const newViewersJson = JSON.stringify(viewers);
-                ctx.project.extensionProperties.calendarViewers = newViewersJson;
-                // Also write via entities.Project path (same reason as persistReleaseManagerGroups)
-                try {
-                    const shortName2 = ctx.project && ctx.project.shortName;
-                    if (shortName2) {
-                        const pe2 = entities.Project.findByKey(shortName2);
-                        if (pe2) {
-                            pe2.extensionProperties.calendarViewers = newViewersJson;
-                            pe2.extensionProperties.calendarSnapshot = JSON.stringify(snapshot);
-                        }
-                    }
-                } catch { /* ignore */ }
-                log('[backend] persistCalendarSnapshot: added viewer=' + login + ' for project=' + (ctx.project && ctx.project.shortName));
-            }
+        const snapshotJson = JSON.stringify(snapshot);
+        ctx.project.extensionProperties.calendarSnapshot = snapshotJson;
+        // Also write via entities.Project path (same reason as persistReleaseManagerGroups)
+        const projectEntity = ctx.project.shortName && entities.Project.findByKey(ctx.project.shortName);
+        if (projectEntity) {
+            projectEntity.extensionProperties.calendarSnapshot = snapshotJson;
         }
     } catch (e) {
         logError('Failed to persist calendar snapshot', e);
@@ -213,35 +200,26 @@ function persistCalendarSnapshot(ctx, releases) {
 /**
  * Registers the current project shortName in the app-global RM project registry
  * (AppGlobalStorage.rmProjectShortNames). The global backend reads this list to
- * enumerate which projects have RM data, then cross-checks calendarViewers per-project.
+ * enumerate which projects have RM data, then checks the user's RM group membership per project.
  * @param {Object} ctx
  */
 function persistUserRmProjects(ctx) {
-    log('[backend] persistUserRmProjects: STARTING for project=' + (ctx.project && ctx.project.shortName));
     try {
         const shortName = ctx.project && ctx.project.shortName;
-        if (!shortName) {
-            log('[backend] persistUserRmProjects: no shortName, skipping');
-            return;
-        }
+        if (!shortName) { return; }
 
         let existing = [];
         try {
             const raw = ctx.globalStorage && ctx.globalStorage.extensionProperties && ctx.globalStorage.extensionProperties.rmProjectShortNames;
-            log('[backend] persistUserRmProjects: globalStorage raw=' + (raw || 'NOT SET'));
             if (raw) { existing = JSON.parse(raw); }
             if (!Array.isArray(existing)) { existing = []; }
-        } catch (e) {
-            log('[backend] persistUserRmProjects: read error=' + (e && e.message));
+        } catch {
             existing = [];
         }
 
         if (existing.indexOf(shortName) === -1) {
             existing.push(shortName);
             ctx.globalStorage.extensionProperties.rmProjectShortNames = JSON.stringify(existing);
-            log('[backend] persistUserRmProjects: registered ' + shortName + ', total=' + existing.length);
-        } else {
-            log('[backend] persistUserRmProjects: ' + shortName + ' already registered, total=' + existing.length);
         }
     } catch (e) {
         logError('Failed to persist RM project registry', e);
@@ -282,7 +260,6 @@ function persistReleaseManagerGroups(ctx) {
         } catch (entityErr) {
             log('[backend] persistReleaseManagerGroups: entity write failed: ' + (entityErr && (entityErr.message || entityErr)));
         }
-        log('[backend] persistReleaseManagerGroups: wrote groups=' + groupsJson + ' for project=' + (ctx.project && ctx.project.shortName));
     } catch (e) {
         logError('Failed to persist releaseManagerGroups', e);
     }
@@ -1547,6 +1524,10 @@ exports.httpHandler = {
             scope: 'project',
             handle: function handle(ctx) {
                 try {
+                    if (!isReleaseManager(ctx)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can change app settings');
+                        return;
+                    }
                     const progressSettings = ctx.request.json();
                     if (!progressSettings.customFieldNames || !Array.isArray(progressSettings.customFieldNames) || progressSettings.customFieldNames.length === 0) {
                         sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'At least one custom field name is required');
@@ -1592,9 +1573,6 @@ exports.httpHandler = {
             scope: 'project',
             handle: function handle(ctx) {
                 try {
-                    const userLogin = ctx.currentUser && ctx.currentUser.login;
-                    const projectShortName = ctx.project && ctx.project.shortName;
-                    log('[refresh-calendar-data] called by=' + userLogin + ' project=' + projectShortName + ' isRM=' + isReleaseManager(ctx));
                     if (!isReleaseManager(ctx)) {
                         ctx.response.code = HTTP_STATUS.FORBIDDEN;
                         ctx.response.json({ ok: false, reason: 'not a release manager' });
@@ -1604,7 +1582,6 @@ exports.httpHandler = {
                     persistCalendarSnapshot(ctx, releaseVersions);
                     persistReleaseManagerGroups(ctx);
                     persistUserRmProjects(ctx);
-                    log('[refresh-calendar-data] done — releases=' + releaseVersions.length);
                     ctx.response.json({ ok: true });
                 } catch (error) {
                     logError('Failed to refresh calendar data', error);
@@ -1621,6 +1598,10 @@ exports.httpHandler = {
             scope: 'project',
             handle: function handle(ctx) {
                 try {
+                    if (!isReleaseManager(ctx)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can create releases');
+                        return;
+                    }
                     const releaseVersion = ctx.request.json();
 
                     // Validate release version
@@ -1697,6 +1678,10 @@ exports.httpHandler = {
             scope: 'project',
             handle: function handle(ctx) {
                 try {
+                    if (!isReleaseManager(ctx) && !isLightManager(ctx)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can edit releases');
+                        return;
+                    }
                     const id = ctx.request.getParameter('id');
                     const updatedReleaseVersion = ctx.request.json();
                     const updated = updateReleaseById(ctx, id, updatedReleaseVersion);
@@ -1723,6 +1708,10 @@ exports.httpHandler = {
             scope: 'project',
             handle: function handle(ctx) {
                 try {
+                    if (!isReleaseManager(ctx)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can delete releases');
+                        return;
+                    }
                     const id = ctx.request.getParameter('id');
 
                     if (!id) {
@@ -1978,6 +1967,10 @@ exports.httpHandler = {
             scope: 'project',
             handle: function handle(ctx) {
                 try {
+                    if (!isReleaseManager(ctx) && !isLightManager(ctx)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can change issue statuses');
+                        return;
+                    }
                     const body = ctx.request.json();
                     const issueId = body && body.issueId;
                     const status = body && body.status;
@@ -2018,6 +2011,10 @@ exports.httpHandler = {
             scope: 'project',
             handle: function handle(ctx) {
                 try {
+                    if (!isReleaseManager(ctx) && !isLightManager(ctx)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can change test statuses');
+                        return;
+                    }
                     const body = ctx.request.json();
                     const issueId = body && body.issueId;
                     const testStatus = body && body.testStatus;
@@ -2153,10 +2150,29 @@ exports.httpHandler = {
                         return;
                     }
 
-                    const payload = ctx.request.json();
+                    if (!isReleaseManager(ctx) && !isLightManager(ctx)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can change the release field');
+                        return;
+                    }
+
+                    const payload = ctx.request.json() || {};
+                    const appSettings = getAppSettings(ctx);
+                    const mappedFieldName = appSettings.customFieldMapping && appSettings.customFieldMapping.plannedReleaseField;
+                    if (!mappedFieldName || payload.fieldName !== mappedFieldName) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Only the mapped release field can be changed');
+                        return;
+                    }
+
                     const issue = entities.Issue.findById(payload.issueId);
-                    if (!issue) {
+                    // Same message for a foreign issue as for a missing one: do not reveal what exists elsewhere
+                    if (!issue || !issue.project || issue.project.shortName !== ctx.project.shortName) {
                         sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Issue not found');
+                        return;
+                    }
+
+                    const field = ctx.project.findFieldByName(mappedFieldName);
+                    if (!field) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field not found');
                         return;
                     }
 
@@ -2165,11 +2181,6 @@ exports.httpHandler = {
                     // driven changes from manual edits and avoid feedback loops.
                     if (issue.extensionProperties) {
                         issue.extensionProperties.updatedByReleaseManager = true;
-                    }
-                    const field = issue.project.findFieldByName(payload.fieldName);
-                    if (!field) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Field not found');
-                        return;
                     }
 
                     // Determine if the field is multi-value by checking if the current value is a Set-like collection
@@ -2300,6 +2311,10 @@ exports.httpHandler = {
             scope: 'project',
             handle: function handle(ctx) {
                 try {
+                    if (!isReleaseManager(ctx)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can import versions');
+                        return;
+                    }
                     const payload = ctx.request.json();
                     const fieldName = payload.fieldName;
                     const versions = payload.versions;
