@@ -192,6 +192,7 @@ export function reconcileReleaseVersions(
     }
     // If shallow-equal for fields we render in a row, keep previous reference
     const same = (
+      p.revision === n.revision &&
       p.product === n.product &&
       p.version === n.version &&
       p.status === n.status &&
