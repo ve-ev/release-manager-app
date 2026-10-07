@@ -1305,6 +1305,27 @@ function syncReleaseWithFilter(ctx, rv) {
 }
 
 /**
+ * Replaces the 'source' marker on rv.plannedIssues with the stored value: issues already in prev keep
+ * their stored marker, new issues become manual. Mutates rv.
+ * @param {Object|null} prev stored release, or null for a new one
+ * @param {Object} rv release from the request
+ */
+function keepStoredSources(prev, rv) {
+    const storedSource = {};
+    ((prev && prev.plannedIssues) || []).forEach(function (it) {
+        if (it && it.id && it.source) { storedSource[it.id] = it.source; }
+    });
+    (rv.plannedIssues || []).forEach(function (it) {
+        if (!it) { return; }
+        if (storedSource[it.id]) {
+            it.source = storedSource[it.id];
+        } else {
+            delete it.source;
+        }
+    });
+}
+
+/**
  * Validates and applies the auto-attach filter of a release that is about to be saved. Mutates rv.
  * @param {Object} ctx
  * @param {Object|null} prev stored release, or null for a new one
@@ -1313,8 +1334,17 @@ function syncReleaseWithFilter(ctx, rv) {
  */
 function applyAutoAttachOnSave(ctx, prev, rv) {
     const prevQuery = (prev && prev.autoAttachQuery) || null;
+    const canManageFilter = isReleaseManager(ctx) || isLightManager(ctx);
+
+    // Only managers decide which issues the filter owns: for other users, ignore client-sent markers
+    if (!canManageFilter) {
+        keepStoredSources(prev, rv);
+    }
 
     if (rv.autoAttachQuery === undefined || rv.autoAttachQuery === null) {
+        if (prevQuery && !canManageFilter) {
+            return { code: HTTP_STATUS.FORBIDDEN, message: 'Only release managers can change the auto-attach filter' };
+        }
         if (prevQuery) {
             // Filter cleared: filter-added issues stay as manual issues
             (rv.plannedIssues || []).forEach(function (it) { if (it) { delete it.source; } });
@@ -1338,7 +1368,7 @@ function applyAutoAttachOnSave(ctx, prev, rv) {
                 : 'The auto-attach filter feature is disabled'
         };
     }
-    if (!isReleaseManager(ctx) && !isLightManager(ctx)) {
+    if (!canManageFilter) {
         return { code: HTTP_STATUS.FORBIDDEN, message: 'Only release managers can change the auto-attach filter' };
     }
     if (isReleaseLocked(rv)) {

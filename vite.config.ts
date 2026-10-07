@@ -80,6 +80,6 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    include: ['widgets/**/__tests__/**/*.test.ts']
+    include: ['widgets/**/__tests__/**/*.test.ts', '__tests__/**/*.test.ts']
   }
 });
