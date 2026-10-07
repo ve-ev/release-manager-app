@@ -22,7 +22,8 @@ const HTTP_STATUS = {
     NO_CONTENT: 204,
     BAD_REQUEST: 400,
     FORBIDDEN: 403,
-    NOT_FOUND: 404
+    NOT_FOUND: 404,
+    CONFLICT: 409
 };
 
 /**
@@ -137,6 +138,35 @@ function getReleaseVersions(ctx) {
     }
 }
 
+const MAX_AUDIT_EVENTS_PER_RELEASE = 200;
+
+/**
+ * Returns the stored revision of a release. Releases saved before revisions existed have revision 0.
+ * @param {Object|undefined} rv
+ * @returns {number}
+ */
+function getRevision(rv) {
+    return (rv && typeof rv.revision === 'number') ? rv.revision : 0;
+}
+
+/**
+ * Sets rv.revision for each release: stored revision + 1 when the release changed, the stored revision otherwise.
+ * Every write path goes through saveReleaseVersions, so a client can detect that its copy is stale.
+ * @param {Object} ctx
+ * @param {Array} releaseVersions
+ */
+function updateRevisions(ctx, releaseVersions) {
+    const storedById = {};
+    getReleaseVersions(ctx).forEach(function (rv) { if (rv && rv.id) { storedById[rv.id] = rv; } });
+    const withoutRevision = function (rv) { return JSON.stringify(Object.assign({}, rv, { revision: undefined })); };
+    releaseVersions.forEach(function (rv) {
+        if (!rv) { return; }
+        const stored = storedById[rv.id];
+        const changed = !stored || withoutRevision(stored) !== withoutRevision(rv);
+        rv.revision = getRevision(stored) + (changed ? 1 : 0);
+    });
+}
+
 /**
  * Saves release versions to extension properties
  *
@@ -144,8 +174,6 @@ function getReleaseVersions(ctx) {
  * @param {Array} releaseVersions - Array of release versions to save
  * @returns {boolean} True if successful, false otherwise
  */
-const MAX_AUDIT_EVENTS_PER_RELEASE = 200;
-
 function saveReleaseVersions(ctx, releaseVersions) {
     try {
         releaseVersions.forEach(function (rv) {
@@ -153,6 +181,7 @@ function saveReleaseVersions(ctx, releaseVersions) {
             // ponytail: keeps the newest events only; keep milestone events (freeze, status) too if old ones are needed
             rv.auditEvents = rv.auditEvents.slice(-MAX_AUDIT_EVENTS_PER_RELEASE);
         });
+        updateRevisions(ctx, releaseVersions);
         ctx.project.extensionProperties.releases = JSON.stringify(releaseVersions);
         return true;
     } catch (error) {
@@ -1551,6 +1580,7 @@ exports.httpHandler = {
             handle: function handle(ctx) {
                 try {
                     const releaseVersions = getReleaseVersions(ctx);
+                    releaseVersions.forEach(function (rv) { if (rv) { rv.revision = getRevision(rv); } });
                     const canViewAudit = isReleaseManager(ctx);
                     const out = canViewAudit
                         ? releaseVersions
@@ -1684,8 +1714,19 @@ exports.httpHandler = {
                     }
                     const id = ctx.request.getParameter('id');
                     const updatedReleaseVersion = ctx.request.json();
+                    // Reject a save based on a stale copy, so it does not overwrite changes made by workflows
+                    // or other users since the client loaded the release. Clients that send no revision are not checked.
+                    const stored = getReleaseVersions(ctx).find(function (rv) { return rv && rv.id === id; });
+                    if (stored && updatedReleaseVersion && typeof updatedReleaseVersion.revision === 'number' &&
+                        updatedReleaseVersion.revision !== getRevision(stored)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.CONFLICT,
+                            'This release was changed by someone else. Close the form, check the latest version, and make your changes again.');
+                        return;
+                    }
                     const updated = updateReleaseById(ctx, id, updatedReleaseVersion);
                     if (updated) {
+                        // A save can run more than once in one request (issue linking), so report the stored revision
+                        updated.revision = getRevision(getReleaseVersions(ctx).find(function (rv) { return rv && rv.id === id; }));
                         persistReleaseManagerGroups(ctx);
                         const canViewAudit = isReleaseManager(ctx);
                         ctx.response.json(stripAuditEventsIfNeeded(updated, canViewAudit));

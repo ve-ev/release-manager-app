@@ -165,6 +165,8 @@ export interface ReleaseVersion {
   autoAttachQuery?: string;
   /** Set by the workflow when the filter wants to add more than the per-release limit. */
   autoAttachLimitReached?: boolean;
+  /** Server-side revision; the server rejects a save based on an older revision. */
+  revision?: number;
 }
 
 /**
