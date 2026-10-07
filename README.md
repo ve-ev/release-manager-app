@@ -23,9 +23,19 @@ A [YouTrack](https://www.jetbrains.com/youtrack/) app for planning, tracking, an
 ## Getting Started
 
 1. Install from the [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/28255-release-manager) or upload the app bundle manually in YouTrack.
-2. Open a project's **Settings → Apps → Release Manager**.
-3. Follow the interactive onboarding: configure custom field names and progress zones in **App Settings** (Step 1), then create your first release (Step 2 unlocks once settings are saved).
-4. Add planned issues to your release and monitor progress.
+2. In the global app settings (**Administration → Apps → Release Manager → Settings**), set the **Release Managers** group. The app stays in the "configuration incomplete" state until you do this. Optionally, set **Light Release Managers** and enable the features you need.
+3. Attach the app to a project. If you use **Custom Field Sync** or **Auto-attach by Filter**, enable the matching workflow (**Update Releases on Custom Field Change** or **Auto-attach Issues by Filter**) in the project.
+4. Open the **Release Manager** tab in the project.
+5. Follow the interactive onboarding: configure custom field names and progress zones in **App Settings** (Step 1), then create your first release (Step 2 unlocks once settings are saved).
+6. Add planned issues to your release and monitor progress.
+
+### Roles
+
+The server enforces these roles on every request:
+
+- **Release Managers** create, edit, and delete releases, freeze and release them, change app settings, import versions, and see the audit trail.
+- **Light Release Managers** edit existing releases (title, dates, description, planned issues) and set issue statuses.
+- Other users of the project can only view releases.
 
 ### Release Calendar (Dashboard Widget)
 
@@ -34,6 +44,8 @@ The **Release Calendar** is a separate dashboard widget included in the same app
 1. Open a YouTrack dashboard and click **Add widget → Release Calendar**.
 2. In the widget's **Edit** config, select the projects to track and choose your preferred display options (show freeze dates, project name, product).
 3. Use the month/quarter/year view toggle and navigation arrows to explore the timeline.
+
+The calendar shows a project only to users who are in that project's Release Managers group.
 
 ## Mental Model
 

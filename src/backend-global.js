@@ -33,8 +33,8 @@ function log(message) {
 }
 
 /**
- * Returns true if the current user is an authorized Release Manager viewer for the given project.
- * Reads the calendarViewers extension property (denormalized by backend.js on GET /releases).
+ * Returns true if the current user is in one of the project's Release Manager groups.
+ * Reads the releaseManagerGroups extension property (mirrored by backend.js).
  *
  * @param {Object} project - YouTrack project entity
  * @param {Object} currentUser - ctx.currentUser
@@ -42,54 +42,38 @@ function log(message) {
  */
 function isUserRmForProject(project, currentUser) {
     try {
-        // Primary: calendarViewers login list (written on RM tab visit after update)
-        var viewersJson = project.extensionProperties && project.extensionProperties.calendarViewers;
-        if (viewersJson) {
-            var viewers = JSON.parse(viewersJson);
-            if (Array.isArray(viewers)) {
-                var login = currentUser && (currentUser.login || currentUser.name);
-                if (login && viewers.indexOf(login) !== -1) { return true; }
-            }
-        }
-
-        // Fallback: check releaseManagerGroups via currentUser.groups collection
         var groupsJson = project.extensionProperties && project.extensionProperties.releaseManagerGroups;
-        log('    releaseManagerGroups = ' + (groupsJson || 'NOT SET'));
-        if (!groupsJson) { return false; }
-        var groups = JSON.parse(groupsJson);
-        if (!Array.isArray(groups) || groups.length === 0) {
-            log('    groups array empty');
-            return false;
-        }
-
-        log('    currentUser.login = ' + (currentUser && currentUser.login));
-
-        for (let i = 0; i < groups.length; i++) {
-            const groupName = groups[i];
-            // Try isInGroup
+        var groups = groupsJson ? JSON.parse(groupsJson) : [];
+        if (!Array.isArray(groups)) { return false; }
+        return groups.some(function (groupName) {
             try {
-                const inGroupResult = currentUser.isInGroup && currentUser.isInGroup(groupName);
-                log('    isInGroup("' + groupName + '") = ' + inGroupResult);
-                if (inGroupResult) { return true; }
-            } catch (e1) { log('    isInGroup threw: ' + (e1 && e1.message)); }
-            // Try iterating currentUser.groups
+                if (currentUser.isInGroup && currentUser.isInGroup(groupName)) { return true; }
+            } catch { /* fall back to currentUser.groups */ }
+            let matched = false;
             try {
-                let matched = false;
-                let groupsCount = 0;
                 currentUser.groups.forEach(function (g) {
-                    groupsCount++;
                     if (g && g.name === groupName) { matched = true; }
                 });
-                log('    currentUser.groups count=' + groupsCount + ' matched="' + groupName + '"=' + matched);
-                if (matched) { return true; }
-            } catch (e2) { log('    currentUser.groups threw: ' + (e2 && e2.message)); }
-        }
-
-        return false;
+            } catch { /* not available */ }
+            return matched;
+        });
     } catch (e) {
-        log('    isUserRmForProject error: ' + (e && (e.message || e)));
+        log('isUserRmForProject error: ' + (e && (e.message || e)));
         return false;
     }
+}
+
+/**
+ * Returns the issue when it exists and the current user can read it, otherwise null.
+ * Global handlers are not tied to a project, so access is checked per issue.
+ *
+ * @param {Object} ctx
+ * @param {string} issueId
+ * @returns {Object|null}
+ */
+function findReadableIssue(ctx, issueId) {
+    const issue = entities.Issue.findById(issueId);
+    return issue && issue.isVisibleTo(ctx.currentUser) ? issue : null;
 }
 
 /**
@@ -106,10 +90,11 @@ function logError(message, error) {
 /**
  * Prepares issue data for API response
  *
+ * @param {Object} ctx - The context object
  * @param {Object} issue - The issue object
  * @returns {Object|null} Formatted issue data or null if issue is not provided
  */
-function prepareIssueData(issue) {
+function prepareIssueData(ctx, issue) {
     if (!issue) {
         return null;
     }
@@ -117,7 +102,9 @@ function prepareIssueData(issue) {
     const subTaskIds = []
     issue.links['parent for'].forEach(
         function (subTask) {
-            subTaskIds.push(subTask.id)
+            if (subTask.isVisibleTo(ctx.currentUser)) {
+                subTaskIds.push(subTask.id)
+            }
         }
     )
 
@@ -189,10 +176,10 @@ exports.httpHandler = {
                         return;
                     }
 
-                    const foundIssue = entities.Issue.findById(issueId);
+                    const foundIssue = findReadableIssue(ctx, issueId);
 
                     if (foundIssue) {
-                        const data = prepareIssueData(foundIssue);
+                        const data = prepareIssueData(ctx, foundIssue);
                         ctx.response.json(data);
                     } else {
                         sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Issue not found');
@@ -219,11 +206,11 @@ exports.httpHandler = {
 
                     // Fetch all issues and return results with found/not found status
                     const results = issueIds.map(function (issueId) {
-                        const foundIssue = entities.Issue.findById(issueId);
+                        const foundIssue = findReadableIssue(ctx, issueId);
                         if (foundIssue) {
                             return {
                                 found: true,
-                                issue: prepareIssueData(foundIssue)
+                                issue: prepareIssueData(ctx, foundIssue)
                             };
                         } else {
                             return {
@@ -264,7 +251,7 @@ exports.httpHandler = {
 
                     for (let i = 0; i < issueIds.length; i++) {
                         const issueId = issueIds[i];
-                        const parent = entities.Issue.findById(issueId);
+                        const parent = findReadableIssue(ctx, issueId);
 
                         if (!parent) {
                             results[issueId] = {items: [], usedField: null};
@@ -282,13 +269,15 @@ exports.httpHandler = {
                         // Collect ids: parent first, then all subtasks
                         const ids = [issueId];
                         parent.links['parent for'].forEach(function (subTask) {
-                            ids.push(subTask.id);
+                            if (subTask.isVisibleTo(ctx.currentUser)) {
+                                ids.push(subTask.id);
+                            }
                         });
 
                         const items = [];
                         for (let j = 0; j < ids.length; j++) {
                             const id = ids[j];
-                            const it = entities.Issue.findById(id);
+                            const it = findReadableIssue(ctx, id);
                             let value = null;
                             if (it && it.fields) {
                                 const fld = it.fields[selectedActualName];
@@ -315,19 +304,15 @@ exports.httpHandler = {
         /**
          * GET /my-rm-projects
          * Returns the list of projects where the current user has the Release Manager role.
-         * Written server-side by backend.js /refresh-calendar-data on each RM widget visit.
+         * Projects come from the registry that backend.js /refresh-calendar-data writes on each RM widget visit.
          */
         {
             method: 'GET',
             path: 'my-rm-projects',
             handle: function handle(ctx) {
                 try {
-                    var login = ctx.currentUser && (ctx.currentUser.login || ctx.currentUser.name);
-                    log('my-rm-projects called by=' + login);
-
                     // Read global registry of RM-enabled project shortNames (written by backend.js)
                     var shortNamesRaw = ctx.globalStorage && ctx.globalStorage.extensionProperties && ctx.globalStorage.extensionProperties.rmProjectShortNames;
-                    log('  globalStorage.rmProjectShortNames=' + (shortNamesRaw || 'NOT SET'));
                     var shortNames = [];
                     if (shortNamesRaw) {
                         try { shortNames = JSON.parse(shortNamesRaw); } catch { shortNames = []; }
@@ -339,11 +324,7 @@ exports.httpHandler = {
                         try {
                             var project = entities.Project.findByKey(shortNames[i]);
                             if (!project) { continue; }
-                            // Check calendarViewers — only RM users are in this list
-                            var viewersJson = project.extensionProperties && project.extensionProperties.calendarViewers;
-                            if (!viewersJson) { continue; }
-                            var viewers = JSON.parse(viewersJson);
-                            if (Array.isArray(viewers) && login && viewers.indexOf(login) !== -1) {
+                            if (isUserRmForProject(project, ctx.currentUser)) {
                                 result.push({
                                     id: project.shortName,
                                     shortName: project.shortName,
@@ -355,7 +336,6 @@ exports.httpHandler = {
                         }
                     }
 
-                    log('my-rm-projects returning ' + result.length + ' project(s)');
                     ctx.response.json(result);
                 } catch (error) {
                     logError('Failed to get my-rm-projects', error);
@@ -415,7 +395,6 @@ exports.httpHandler = {
                         }
                     }
 
-                    log('calendar-releases returning ' + result.length + ' projects, total releases=' + result.reduce(function(s,p){ return s + (p.releases ? p.releases.length : 0); }, 0));
                     ctx.response.json(result);
                 } catch (error) {
                     logError('Failed to get calendar releases', error);
