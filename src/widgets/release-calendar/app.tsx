@@ -6,7 +6,7 @@ import type { EmbeddableWidgetAPI } from '../../../@types/globals';
 import type { CalendarConfig, CalendarEvent, ProjectReleases, YouTrackProject } from './interfaces';
 import { CalendarGrid } from './components/calendar-grid';
 import { CalendarAPI } from './api';
-import { buildCalendarEvents, getQuarterFromMonth, navigateMonth } from './utils/calendar-utils';
+import { buildCalendarEvents, getQuarterFromMonth, navigateMonth, MONTHS_PER_QUARTER } from './utils/calendar-utils';
 import './app.css';
 
 // Module-level callback so YTApp.register (called before React mounts) can trigger config mode
@@ -15,12 +15,149 @@ let triggerConfigMode: (() => void) | null = null;
 // eslint-disable-next-line react-refresh/only-export-components
 export const host = await YTApp.register({
   onConfigure: () => {
-    if (triggerConfigMode) triggerConfigMode();
+    if (triggerConfigMode) {triggerConfigMode();}
   }
 }) as EmbeddableWidgetAPI;
 const calendarApi = new CalendarAPI(host);
 
 type WidgetMode = 'loading' | 'config' | 'render' | 'error';
+
+/** Show the project filter input only when the list is longer than this. */
+const PROJECT_FILTER_MIN_PROJECTS = 3;
+
+interface StoredConfig {
+  projectIdsJson?: string;
+  defaultView?: string;
+  showFreezeDates?: string;
+  showProjectName?: string;
+  showProduct?: string;
+}
+
+/** Parses the widget config; returns null when no projects are configured yet. */
+function parseStoredConfig(raw: StoredConfig | null) {
+  const projectIds = raw?.projectIdsJson ? JSON.parse(raw.projectIdsJson) as string[] : [];
+  if (!raw || projectIds.length === 0) { return null; }
+  return {
+    projectIds,
+    defaultView: (raw.defaultView || 'month') as CalendarConfig['defaultView'],
+    showFreezeDates: raw.showFreezeDates !== 'false', // default true
+    showProjectName: raw.showProjectName === 'true',
+    showProduct: raw.showProduct === 'true'
+  };
+}
+
+interface SelectedProjectsProps {
+  selectedProjectIds: string[];
+  availableProjects: YouTrackProject[];
+  onMoveUp: (id: string) => void;
+  onMoveDown: (id: string) => void;
+  onRemove: (id: string) => void;
+}
+
+const SelectedProjects: React.FC<SelectedProjectsProps> = ({ selectedProjectIds, availableProjects, onMoveUp, onMoveDown, onRemove }) => (
+  <div className="rc-config-section">
+    <div className="rc-config-section-label">Selected projects</div>
+    <div className="rc-selected-list">
+      {selectedProjectIds.map((id, idx) => (
+        <div key={id} className="rc-project-item">
+          <div className="rc-project-item-reorder">
+            <button
+              type="button"
+              className="rc-reorder-btn"
+              onClick={() => onMoveUp(id)}
+              disabled={idx === 0}
+              title="Move up"
+              aria-label="Move up"
+            >↑</button>
+            <button
+              type="button"
+              className="rc-reorder-btn"
+              onClick={() => onMoveDown(id)}
+              disabled={idx === selectedProjectIds.length - 1}
+              title="Move down"
+              aria-label="Move down"
+            >↓</button>
+          </div>
+          <span className="rc-project-item-name">{availableProjects.find(p => p.id === id)?.name || id}</span>
+          <button
+            type="button"
+            className="rc-remove-btn"
+            onClick={() => onRemove(id)}
+            title="Remove"
+            aria-label="Remove project"
+          >✕</button>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const AvailableList: React.FC<{ addable: YouTrackProject[]; hasProjects: boolean; isFiltered: boolean; onAdd: (id: string) => void }> = ({ addable, hasProjects, isFiltered, onAdd }) => (
+  <div className="rc-available-list">
+    {addable.map(p => (
+      <button
+        type="button"
+        key={p.id}
+        className="rc-available-item"
+        onClick={() => onAdd(p.id)}
+      >
+        <span className="rc-available-item-icon">+</span>
+        <span className="rc-available-item-name">{p.name}</span>
+      </button>
+    ))}
+    {addable.length === 0 && hasProjects && (
+      <div className="rc-empty-available">
+        {isFiltered ? 'No projects match the filter' : 'All projects selected'}
+      </div>
+    )}
+    {!hasProjects && (
+      <div className="rc-empty-available">
+        Open the Release Manager tab in a project where you are a Release Manager, then return here.
+      </div>
+    )}
+  </div>
+);
+
+interface AvailableProjectsProps {
+  selectedProjectIds: string[];
+  availableProjects: YouTrackProject[];
+  projectsLoaded: boolean;
+  projectFilter: string;
+  onFilterChange: (value: string) => void;
+  onAdd: (id: string) => void;
+}
+
+const AvailableProjects: React.FC<AvailableProjectsProps> = ({ selectedProjectIds, availableProjects, projectsLoaded, projectFilter, onFilterChange, onAdd }) => {
+  const addable = availableProjects.filter(p =>
+    !selectedProjectIds.includes(p.id) &&
+    p.name.toLowerCase().includes(projectFilter.toLowerCase())
+  );
+  return (
+    <div className="rc-config-section">
+      <div className="rc-config-section-label">
+        {selectedProjectIds.length > 0 ? 'Add more projects' : 'Select projects to display'}
+      </div>
+      {!projectsLoaded ? (
+        <div className="rc-empty-state"><LoaderInline/></div>
+      ) : (
+        <>
+          {availableProjects.length > PROJECT_FILTER_MIN_PROJECTS && (
+            <input
+              className="rc-project-filter"
+              type="text"
+              placeholder="Filter projects…"
+              value={projectFilter}
+              onChange={e => onFilterChange(e.target.value)}
+              autoFocus
+            />
+          )}
+          <AvailableList addable={addable} hasProjects={availableProjects.length > 0} isFiltered={!!projectFilter} onAdd={onAdd}/>
+        </>
+      )}
+    </div>
+  );
+};
+
 
 export const App: React.FunctionComponent = () => {
   const today = new Date();
@@ -65,76 +202,12 @@ export const App: React.FunctionComponent = () => {
     return () => { triggerConfigMode = null; };
   }, [configuredProjects, showFreezeDates, showProjectName, showProduct]);
 
-  // ---- Initial load ----
-  useEffect(() => {
-    (async () => {
-      try {
-        const rawConfig = await host.readConfig<{ projectIdsJson?: string; defaultView?: string; showFreezeDates?: string; showProjectName?: string; showProduct?: string }>();
-        const config = rawConfig?.projectIdsJson
-          ? { projectIds: JSON.parse(rawConfig.projectIdsJson) as string[], defaultView: (rawConfig.defaultView || 'month') as CalendarConfig['defaultView'] }
-          : null;
-        if (!config || !config.projectIds || config.projectIds.length === 0) {
-          setProjectsLoaded(false);
-          setMode('config');
-          return;
-        }
-
-        const showFF = rawConfig?.showFreezeDates !== 'false'; // default true
-        setShowFreezeDates(showFF);
-        setConfigShowFF(showFF);
-        const showPN = rawConfig?.showProjectName === 'true';
-        setShowProjectName(showPN);
-        setConfigShowPN(showPN);
-        const showPr = rawConfig?.showProduct === 'true';
-        setShowProduct(showPr);
-        setConfigShowProd(showPr);
-
-        const projectIds = config.projectIds;
-        setView(config.defaultView || 'month');
-        setVisibleProjectIds(new Set(projectIds));
-
-        // Render stale cache immediately
-        const cached = await calendarApi.getCachedReleases();
-        if (cached) {
-          setReleases(cached);
-          setConfiguredProjects(projectIds.map(id => ({ id, shortName: id, name: id })));
-          setMode('render');
-        }
-
-        // Resolve full project objects from cache
-        const savedProjects = await calendarApi.readProjectsCache();
-        // Preserve projectIds config order
-        const projectRefs: YouTrackProject[] = projectIds.map(id =>
-          savedProjects.find(p => p.id === id) ?? { id, shortName: id, name: id }
-        );
-
-        // Load fresh data from storage (background if stale cache exists, foreground otherwise)
-        await refreshReleases(projectRefs, config.defaultView || 'month', !cached);
-      } catch (e) {
-        setError(String(e));
-        setMode('error');
-      }
-    })();
-  }, []);
-
-  const loadAvailableProjects = useCallback(async () => {
-    try {
-      // Server-side: reads User.extensionProperties.rmProjects written by RM widget on visit
-      const projects = await calendarApi.fetchMyRmProjects();
-      setAvailableProjects(projects);
-    } catch (e) {
-      setError(`Failed to load projects: ${String(e)}`);
-    } finally {
-      setProjectsLoaded(true);
-    }
-  }, []);
-
   const refreshReleases = useCallback(async (
     projects: YouTrackProject[],
     currentView: CalendarConfig['defaultView'],
     showLoadingState: boolean
   ) => {
-    if (showLoadingState) setMode('loading');
+    if (showLoadingState) {setMode('loading');}
     try {
       const data = await calendarApi.fetchCalendarReleases(projects);
       // Preserve the user-defined order from `projects`, not the backend response order
@@ -160,18 +233,71 @@ export const App: React.FunctionComponent = () => {
     }
   }, []);
 
+  // ---- Initial load ----
+  useEffect(() => {
+    (async () => {
+      try {
+        const config = parseStoredConfig(await host.readConfig<StoredConfig>());
+        if (!config) {
+          setProjectsLoaded(false);
+          setMode('config');
+          return;
+        }
+
+        setShowFreezeDates(config.showFreezeDates);
+        setConfigShowFF(config.showFreezeDates);
+        setShowProjectName(config.showProjectName);
+        setConfigShowPN(config.showProjectName);
+        setShowProduct(config.showProduct);
+        setConfigShowProd(config.showProduct);
+
+        const projectIds = config.projectIds;
+        setView(config.defaultView);
+        setVisibleProjectIds(new Set(projectIds));
+
+        // Render stale cache immediately
+        const cached = await calendarApi.getCachedReleases();
+        if (cached) {
+          setReleases(cached);
+          setConfiguredProjects(projectIds.map(id => ({ id, shortName: id, name: id })));
+          setMode('render');
+        }
+
+        // Resolve full project objects from cache
+        const savedProjects = await calendarApi.readProjectsCache();
+        // Preserve projectIds config order
+        const projectRefs: YouTrackProject[] = projectIds.map(id =>
+          savedProjects.find(p => p.id === id) ?? { id, shortName: id, name: id }
+        );
+
+        // Load fresh data from storage (background if stale cache exists, foreground otherwise)
+        await refreshReleases(projectRefs, config.defaultView, !cached);
+      } catch (e) {
+        setError(String(e));
+        setMode('error');
+      }
+    })();
+  }, [refreshReleases]);
+
+  const loadAvailableProjects = useCallback(async () => {
+    try {
+      // Server-side: reads User.extensionProperties.rmProjects written by RM widget on visit
+      const projects = await calendarApi.fetchMyRmProjects();
+      setAvailableProjects(projects);
+    } catch (e) {
+      setError(`Failed to load projects: ${String(e)}`);
+    } finally {
+      setProjectsLoaded(true);
+    }
+  }, []);
+
+
   // ---- Config mode ----
   useEffect(() => {
     if (mode === 'config' && !projectsLoaded) {
       loadAvailableProjects();
     }
   }, [mode, projectsLoaded, loadAvailableProjects]);
-
-  const toggleProjectSelection = useCallback((id: string) => {
-    setSelectedProjectIds(prev =>
-      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
-    );
-  }, []);
 
   const handleCancelConfig = useCallback(async () => {
     try { await host.exitConfigMode(); } catch { /* ignore */ }
@@ -184,7 +310,7 @@ export const App: React.FunctionComponent = () => {
   const moveProjectUp = useCallback((id: string) => {
     setSelectedProjectIds(prev => {
       const idx = prev.indexOf(id);
-      if (idx <= 0) return prev;
+      if (idx <= 0) {return prev;}
       const next = [...prev];
       [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
       return next;
@@ -194,7 +320,7 @@ export const App: React.FunctionComponent = () => {
   const moveProjectDown = useCallback((id: string) => {
     setSelectedProjectIds(prev => {
       const idx = prev.indexOf(id);
-      if (idx >= prev.length - 1) return prev;
+      if (idx >= prev.length - 1) {return prev;}
       const next = [...prev];
       [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
       return next;
@@ -202,7 +328,7 @@ export const App: React.FunctionComponent = () => {
   }, []);
 
   const handleSaveConfig = useCallback(async () => {
-    if (selectedProjectIds.length === 0) return;
+    if (selectedProjectIds.length === 0) {return;}
     setIsSavingConfig(true);
     try {
       const config: CalendarConfig = { projectIds: selectedProjectIds, defaultView: view };
@@ -238,7 +364,7 @@ export const App: React.FunctionComponent = () => {
       setYear(next.year);
       setMonth(next.month);
     } else if (view === 'quarter') {
-      const next = navigateMonth(year, month, delta * 3);
+      const next = navigateMonth(year, month, delta * MONTHS_PER_QUARTER);
       setYear(next.year);
       setMonth(next.month);
     } else {
@@ -247,14 +373,15 @@ export const App: React.FunctionComponent = () => {
   }, [view, year, month]);
 
   const handleToday = useCallback(() => {
-    setYear(today.getFullYear());
-    setMonth(today.getMonth());
+    const now = new Date();
+    setYear(now.getFullYear());
+    setMonth(now.getMonth());
   }, []);
 
   const handleViewChange = useCallback((newView: CalendarConfig['defaultView']) => {
     setView(newView);
     if (newView === 'quarter') {
-      setMonth(getQuarterFromMonth(month) * 3);
+      setMonth(getQuarterFromMonth(month) * MONTHS_PER_QUARTER);
     }
   }, [month]);
 
@@ -273,7 +400,7 @@ export const App: React.FunctionComponent = () => {
   }, []);
 
   const handleRefresh = useCallback(async () => {
-    if (isRefreshing) return;
+    if (isRefreshing) {return;}
     setIsRefreshing(true);
     try {
       const savedProjects = await calendarApi.readProjectsCache();
@@ -293,7 +420,7 @@ export const App: React.FunctionComponent = () => {
   if (mode === 'loading') {
     return (
       <div className="rc-widget rc-empty-state">
-        <LoaderInline />
+        <LoaderInline/>
       </div>
     );
   }
@@ -315,107 +442,32 @@ export const App: React.FunctionComponent = () => {
         <div className="rc-config-panel">
           <h2 className="rc-config-title">Configure Calendar</h2>
 
-          {/* Selected projects with reorder */}
           {selectedProjectIds.length > 0 && (
-            <div className="rc-config-section">
-              <div className="rc-config-section-label">Selected projects</div>
-              <div className="rc-selected-list">
-                {selectedProjectIds.map((id, idx) => {
-                  const project = availableProjects.find(p => p.id === id);
-                  const name = project?.name || id;
-                  return (
-                    <div key={id} className="rc-project-item">
-                      <div className="rc-project-item-reorder">
-                        <button
-                          className="rc-reorder-btn"
-                          onClick={() => moveProjectUp(id)}
-                          disabled={idx === 0}
-                          title="Move up"
-                          aria-label="Move up"
-                        >↑</button>
-                        <button
-                          className="rc-reorder-btn"
-                          onClick={() => moveProjectDown(id)}
-                          disabled={idx === selectedProjectIds.length - 1}
-                          title="Move down"
-                          aria-label="Move down"
-                        >↓</button>
-                      </div>
-                      <span className="rc-project-item-name">{name}</span>
-                      <button
-                        className="rc-remove-btn"
-                        onClick={() => setSelectedProjectIds(prev => prev.filter(pid => pid !== id))}
-                        title="Remove"
-                        aria-label="Remove project"
-                      >✕</button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <SelectedProjects
+              selectedProjectIds={selectedProjectIds}
+              availableProjects={availableProjects}
+              onMoveUp={moveProjectUp}
+              onMoveDown={moveProjectDown}
+              onRemove={id => setSelectedProjectIds(prev => prev.filter(pid => pid !== id))}
+            />
           )}
 
-          {/* Available projects with filter */}
-          <div className="rc-config-section">
-            <div className="rc-config-section-label">
-              {selectedProjectIds.length > 0 ? 'Add more projects' : 'Select projects to display'}
-            </div>
-            {!projectsLoaded ? (
-              <div className="rc-empty-state"><LoaderInline /></div>
-            ) : (
-              <>
-                {availableProjects.length > 3 && (
-                  <input
-                    className="rc-project-filter"
-                    type="text"
-                    placeholder="Filter projects…"
-                    value={projectFilter}
-                    onChange={e => setProjectFilter(e.target.value)}
-                    autoFocus
-                  />
-                )}
-                <div className="rc-available-list">
-                  {availableProjects
-                    .filter(p =>
-                      !selectedProjectIds.includes(p.id) &&
-                      p.name.toLowerCase().includes(projectFilter.toLowerCase())
-                    )
-                    .map(p => (
-                      <button
-                        key={p.id}
-                        className="rc-available-item"
-                        onClick={() => setSelectedProjectIds(prev => [...prev, p.id])}
-                      >
-                        <span className="rc-available-item-icon">+</span>
-                        <span className="rc-available-item-name">{p.name}</span>
-                      </button>
-                    ))
-                  }
-                  {availableProjects.filter(p =>
-                    !selectedProjectIds.includes(p.id) &&
-                    p.name.toLowerCase().includes(projectFilter.toLowerCase())
-                  ).length === 0 && availableProjects.length > 0 && (
-                    <div className="rc-empty-available">
-                      {projectFilter ? 'No projects match the filter' : 'All projects selected'}
-                    </div>
-                  )}
-                  {availableProjects.length === 0 && (
-                    <div className="rc-empty-available">
-                      Open the Release Manager tab in a project where you are a Release Manager, then return here.
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+          <AvailableProjects
+            selectedProjectIds={selectedProjectIds}
+            availableProjects={availableProjects}
+            projectsLoaded={projectsLoaded}
+            projectFilter={projectFilter}
+            onFilterChange={setProjectFilter}
+            onAdd={id => setSelectedProjectIds(prev => [...prev, id])}
+          />
 
           {/* Display options */}
           <div className="rc-config-section">
             <div className="rc-config-section-label">Display options</div>
             <div className="rc-options-list">
-              <Checkbox label="Show Feature Freeze dates" checked={configShowFF} onChange={() => setConfigShowFF(v => !v)} />
-              <Checkbox label="Show project name in tags" checked={configShowPN} onChange={() => setConfigShowPN(v => !v)} />
-              <Checkbox label="Show product tag" checked={configShowProd} onChange={() => setConfigShowProd(v => !v)} />
+              <Checkbox label="Show Feature Freeze dates" checked={configShowFF} onChange={() => setConfigShowFF(v => !v)}/>
+              <Checkbox label="Show project name in tags" checked={configShowPN} onChange={() => setConfigShowPN(v => !v)}/>
+              <Checkbox label="Show product tag" checked={configShowProd} onChange={() => setConfigShowProd(v => !v)}/>
             </div>
           </div>
 

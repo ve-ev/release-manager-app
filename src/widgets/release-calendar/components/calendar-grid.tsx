@@ -10,11 +10,14 @@ import {
   getQuarterMonths,
   getQuarterFromMonth,
   getReleaseMarkerColor,
-  isSameDay
+  isSameDay,
+  MONTHS_PER_YEAR
 } from '../utils/calendar-utils';
 import './calendar-grid.css';
 
 const DAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAYS_PER_WEEK = DAY_HEADERS.length;
+const HALF = 2;
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
@@ -50,7 +53,7 @@ const Tooltip: React.FC<TooltipProps> = ({ text, children }) => {
 
   const handleMouseEnter = (e: React.MouseEvent<HTMLElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    setPos({ x: rect.left + rect.width / 2, y: rect.top });
+    setPos({ x: rect.left + rect.width / HALF, y: rect.top });
   };
 
   const handleMouseLeave = () => setPos(null);
@@ -84,18 +87,18 @@ interface EventMarkerProps {
 }
 
 const EventMarker: React.FC<EventMarkerProps> = ({ event, mini, showProjectName, showProduct }) => {
-  const label = `${event.type === 'freeze' ? 'FF' : 'R'}: ${event.version} · ${event.projectName} · ${event.status}`;
+  const prefix = event.type === 'freeze' ? 'FF' : 'R';
+  const label = `${prefix}: ${event.version} · ${event.projectName} · ${event.status}`;
   const color = getReleaseMarkerColor(event);
 
   if (mini) {
     return (
       <Tooltip text={label}>
-        <span className="rc-marker" style={{ backgroundColor: color }} />
+        <span className="rc-marker" style={{ backgroundColor: color }}/>
       </Tooltip>
     );
   }
 
-  const prefix = event.type === 'freeze' ? 'FF' : 'R';
   return (
     <Tooltip text={label}>
       <span
@@ -129,7 +132,7 @@ const Legend: React.FC = () => (
   <div className="rc-legend">
     {LEGEND_ITEMS.map(item => (
       <span key={item.label} className="rc-legend-item">
-        <span className="rc-legend-dot" style={{ backgroundColor: item.color }} />
+        <span className="rc-legend-dot" style={{ backgroundColor: item.color }}/>
         <span className="rc-legend-label">{item.label}</span>
       </span>
     ))}
@@ -147,60 +150,130 @@ interface MonthGridProps {
   showProduct?: boolean;
 }
 
+/** Month title; a button when clicking it jumps to that month (quarter and year views). */
+const MonthTitle: React.FC<{ title: string; onClick?: () => void }> = ({ title, onClick }) => (onClick ? (
+  <button
+    type="button"
+    className="rc-month-title rc-month-title--clickable"
+    onClick={e => { e.stopPropagation(); onClick(); }}
+  >
+    {title}
+  </button>
+) : (
+  <div className="rc-month-title">{title}</div>
+));
+
+interface DayCellProps {
+  day: Date;
+  today: Date;
+  events: CalendarEvent[];
+  mini?: boolean;
+  showProjectName?: boolean;
+  showProduct?: boolean;
+}
+
+const DayCell: React.FC<DayCellProps> = ({ day, today, events, mini, showProjectName, showProduct }) => (
+  <div className={`rc-day-cell${isSameDay(day, today) ? ' rc-day-cell--today' : ''}`}>
+    <div className="rc-day-number">{day.getDate()}</div>
+    <div className="rc-day-markers">
+      {getEventsForDay(events, day).map(ev => (
+        <EventMarker key={`${ev.projectId}-${ev.releaseId}-${ev.type}`} event={ev} mini={mini} showProjectName={showProjectName} showProduct={showProduct}/>
+      ))}
+    </div>
+  </div>
+);
+
+/** Props that make the whole mini grid a keyboard-accessible button (year view). */
+function clickableGridProps(onActivate?: () => void): React.HTMLAttributes<HTMLDivElement> {
+  if (!onActivate) { return {}; }
+  return {
+    role: 'button',
+    tabIndex: 0,
+    style: { cursor: 'pointer' },
+    onClick: onActivate,
+    onKeyDown: e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onActivate();
+      }
+    }
+  };
+}
+
 const MonthGrid: React.FC<MonthGridProps> = ({ year, month, events, mini, showProjectName, showProduct, onMonthClick, onTitleClick }) => {
   const today = useMemo(() => new Date(), []);
   const days = useMemo(() => getMonthDays(year, month), [year, month]);
 
-  // Offset: getDay() returns 0=Sun, we want 0=Mon
-  const firstDayOfWeek = (new Date(year, month, 1).getDay() + 6) % 7;
-  const emptyCells = Array.from({ length: firstDayOfWeek });
-
-  const title = `${MONTH_NAMES[month]} ${year}`;
+  // Offset: getDay() returns 0=Sun, we want 0=Mon. Blank cells are positional, so their keys are too.
+  const firstDayOfWeek = (new Date(year, month, 1).getDay() + DAYS_PER_WEEK - 1) % DAYS_PER_WEEK;
+  const emptyCellKeys = Array.from({ length: firstDayOfWeek }, (_, i) => `empty-${i}`);
+  const activateMonth = mini && onMonthClick ? () => onMonthClick(year, month) : undefined;
+  const activateTitle = onTitleClick ? () => onTitleClick(year, month) : undefined;
 
   return (
-    <div
-      className={`rc-month-grid${mini ? ' rc-month-mini' : ''}`}
-      style={{ cursor: mini && onMonthClick ? 'pointer' : undefined }}
-      onClick={mini && onMonthClick ? () => onMonthClick(year, month) : undefined}
-    >
-      {mini && (
-        <div
-          className={`rc-month-title${onTitleClick ? ' rc-month-title--clickable' : ''}`}
-          onClick={onTitleClick ? (e) => { e.stopPropagation(); onTitleClick(year, month); } : undefined}
-        >
-          {title}
-        </div>
-      )}
+    <div className={`rc-month-grid${mini ? ' rc-month-mini' : ''}`} {...clickableGridProps(activateMonth)}>
+      {mini && <MonthTitle title={`${MONTH_NAMES[month]} ${year}`} onClick={activateTitle}/>}
       <div className="rc-day-headers">
         {DAY_HEADERS.map(h => (
           <div key={h} className="rc-day-header">{h}</div>
         ))}
       </div>
       <div className="rc-days-grid">
-        {emptyCells.map((_, i) => (
-          <div key={`e-${i}`} className="rc-day-cell rc-day-cell--empty" />
+        {emptyCellKeys.map(key => (
+          <div key={key} className="rc-day-cell rc-day-cell--empty"/>
         ))}
-        {days.map(day => {
-          const dayEvents = getEventsForDay(events, day);
-          const isToday = isSameDay(day, today);
-          return (
-            <div
-              key={day.getDate()}
-              className={`rc-day-cell${isToday ? ' rc-day-cell--today' : ''}`}
-            >
-              <div className="rc-day-number">{day.getDate()}</div>
-              <div className="rc-day-markers">
-                {dayEvents.map((ev, i) => (
-                  <EventMarker key={`${ev.releaseId}-${ev.type}-${i}`} event={ev} mini={mini} showProjectName={showProjectName} showProduct={showProduct} />
-                ))}
-              </div>
-            </div>
-          );
-        })}
+        {days.map(day => (
+          <DayCell key={day.getDate()} day={day} today={today} events={events} mini={mini} showProjectName={showProjectName} showProduct={showProduct}/>
+        ))}
       </div>
     </div>
   );
 };
+
+const ToolbarActions: React.FC<{ onRefresh?: () => void; isRefreshing?: boolean; onConfigure?: () => void }> = ({ onRefresh, isRefreshing, onConfigure }) => (
+  <>
+    {onRefresh && (
+      <Button onClick={onRefresh} title="Refresh data" disabled={isRefreshing}>
+        <span className={isRefreshing ? 'rc-refresh-icon rc-refresh-icon--spinning' : 'rc-refresh-icon'}>↺</span>
+      </Button>
+    )}
+    {onConfigure && (
+      <Button onClick={onConfigure} title="Configure widget">
+        <Icon glyph={settingsIcon}/>
+      </Button>
+    )}
+  </>
+);
+
+interface ProjectChipsProps {
+  projects: Array<{ id: string; name: string }>;
+  visibleProjectIds: Set<string>;
+  onToggle: (projectId: string) => void;
+}
+
+const ProjectChips: React.FC<ProjectChipsProps> = ({ projects, visibleProjectIds, onToggle }) => (
+  <div className="rc-chips-bar">
+    {projects.map(p => (
+      <button
+        type="button"
+        key={p.id}
+        className={`rc-project-chip${visibleProjectIds.has(p.id) ? ' rc-project-chip--active' : ''}`}
+        aria-pressed={visibleProjectIds.has(p.id)}
+        onClick={() => onToggle(p.id)}
+        title={p.name}
+      >
+        <span className="rc-project-chip-dot"/>
+        <span className="rc-project-chip-name">{p.name}</span>
+      </button>
+    ))}
+  </div>
+);
+
+function getTitleText(view: CalendarGridProps['view'], year: number, month: number): string {
+  if (view === 'month') { return `${MONTH_NAMES[month]} ${year}`; }
+  if (view === 'quarter') { return `Q${getQuarterFromMonth(month) + 1} ${year}`; }
+  return `${year}`;
+}
 
 export const CalendarGrid: React.FC<CalendarGridProps> = ({
   events,
@@ -227,12 +300,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   );
 
   const quarter = getQuarterFromMonth(month);
-
-  const titleText = view === 'month'
-    ? `${MONTH_NAMES[month]} ${year}`
-    : view === 'quarter'
-    ? `Q${quarter + 1} ${year}`
-    : `${year}`;
+  const titleText = getTitleText(view, year, month);
 
   const quarterMonths = useMemo(
     () => getQuarterMonths(year, quarter),
@@ -244,8 +312,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       onJumpToMonth(y, m);
     } else {
       onViewChange('month');
-      const currentAbsolute = year * 12 + month;
-      const targetAbsolute = y * 12 + m;
+      const currentAbsolute = year * MONTHS_PER_YEAR + month;
+      const targetAbsolute = y * MONTHS_PER_YEAR + m;
       onNavigate(targetAbsolute - currentAbsolute);
     }
   };
@@ -261,54 +329,33 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         <Button onClick={() => onViewChange('month')} active={view === 'month'}>Month</Button>
         <Button onClick={() => onViewChange('quarter')} active={view === 'quarter'}>Quarter</Button>
         <Button onClick={() => onViewChange('year')} active={view === 'year'}>Year</Button>
-        <div className="rc-toolbar-spacer" />
-        {onRefresh && (
-          <Button onClick={onRefresh} title="Refresh data" disabled={isRefreshing}>
-            <span className={isRefreshing ? 'rc-refresh-icon rc-refresh-icon--spinning' : 'rc-refresh-icon'}>↺</span>
-          </Button>
-        )}
-        {onConfigure && (
-          <Button onClick={onConfigure} title="Configure widget">
-            <Icon glyph={settingsIcon} />
-          </Button>
-        )}
+        <div className="rc-toolbar-spacer"/>
+        <ToolbarActions onRefresh={onRefresh} isRefreshing={isRefreshing} onConfigure={onConfigure}/>
       </div>
 
       {/* Project chips — only shown when multiple projects are selected */}
       {allProjects.length > 1 && (
-        <div className="rc-chips-bar">
-          {allProjects.map(p => (
-            <span
-              key={p.id}
-              className={`rc-project-chip${visibleProjectIds.has(p.id) ? ' rc-project-chip--active' : ''}`}
-              onClick={() => onProjectToggle(p.id)}
-              title={p.name}
-            >
-              <span className="rc-project-chip-dot" />
-              <span className="rc-project-chip-name">{p.name}</span>
-            </span>
-          ))}
-        </div>
+        <ProjectChips projects={allProjects} visibleProjectIds={visibleProjectIds} onToggle={onProjectToggle}/>
       )}
 
       {/* Calendar body */}
       {view === 'month' && (
-        <MonthGrid year={year} month={month} events={filteredEvents} showProjectName={showProjectName} showProduct={showProduct} />
+        <MonthGrid year={year} month={month} events={filteredEvents} showProjectName={showProjectName} showProduct={showProduct}/>
       )}
 
       {view === 'quarter' && (
         <div className="rc-quarter-view">
           {quarterMonths.map(({ year: y, month: m }) => (
-            <MonthGrid key={`${y}-${m}`} year={y} month={m} events={filteredEvents} mini onTitleClick={handleYearMonthClick} showProjectName={showProjectName} showProduct={showProduct} />
+            <MonthGrid key={`${y}-${m}`} year={y} month={m} events={filteredEvents} mini onTitleClick={handleYearMonthClick} showProjectName={showProjectName} showProduct={showProduct}/>
           ))}
         </div>
       )}
 
       {view === 'year' && (
         <div className="rc-year-view">
-          {Array.from({ length: 12 }, (_, i) => (
+          {MONTH_NAMES.map((name, i) => (
             <MonthGrid
-              key={i}
+              key={name}
               year={year}
               month={i}
               events={filteredEvents}
@@ -323,7 +370,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       )}
 
       {/* Legend — bottom of calendar */}
-      <Legend />
+      <Legend/>
     </div>
   );
 };

@@ -335,7 +335,7 @@ async function shot(outFile, mockScript, widgetPath, interact, viewport = { widt
     :root { --ring-font-family: 'Inter', system-ui, -apple-system, sans-serif !important; }
     html, body { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
   ` });
-  if (interact) await interact(page);
+  if (interact) {await interact(page);}
   await page.screenshot({ path: join(OUTPUT, outFile), fullPage: false, clip });
   await page.close();
   await ctx.close();
