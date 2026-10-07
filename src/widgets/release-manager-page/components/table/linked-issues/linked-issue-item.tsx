@@ -6,6 +6,7 @@ import Tag from '@jetbrains/ring-ui-built/components/tag/tag';
 import {ProgressBar, ProgressDot, ProgressZone} from '../progress/progress-bar.tsx';
 import type {AppSettings, FrozenZone} from '../../../interfaces';
 import {getZoneWithColor, getStatusColor, getTestStatusColor} from '../../../utils/progress-helpers';
+import {AutoAttachBadge} from '../../common';
 import type {IssueStatus, TestStatus} from '../../../hooks/useIssueStatuses';
 
 // Re-export types for backwards compatibility
@@ -34,7 +35,7 @@ export interface SubtaskData {
 }
 
 export interface LinkedIssueItemProps {
-  issue: { id: string; idReadable?: string; summary: string; isMeta?: boolean; metaRelatedIssueIds?: string[] };
+  issue: { id: string; idReadable?: string; summary: string; isMeta?: boolean; metaRelatedIssueIds?: string[]; source?: 'manual' | 'filter' };
   baseUrl: string;
   status: IssueStatus;
   testStatus: TestStatus;
@@ -304,7 +305,10 @@ const LinkedIssueItemComponent: React.FC<LinkedIssueItemProps> = ({
         >
           {issue.idReadable || issue.id}
         </a>
-        <span className="linked-issue-summary">{issue.summary}</span>
+        <span className="linked-issue-summary issue-summary-with-badge">
+          <span className="issue-summary-text">{issue.summary}</span>
+          {issue.source === 'filter' && <AutoAttachBadge/>}
+        </span>
         {renderProgress}
         {hasControls && (
           <div className="issue-controls">
@@ -326,6 +330,7 @@ export const LinkedIssueItem = React.memo(LinkedIssueItemComponent, (prev, next)
   prev.issue.id === next.issue.id &&
   prev.issue.idReadable === next.issue.idReadable &&
   prev.issue.summary === next.issue.summary &&
+  prev.issue.source === next.issue.source &&
   prev.issueData === next.issueData &&
   prev.frozenZone === next.frozenZone &&
   prev.progressSettings === next.progressSettings

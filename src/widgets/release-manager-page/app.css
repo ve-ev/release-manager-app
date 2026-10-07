@@ -190,3 +190,64 @@
   align-items: center;
   gap: 4px;
 }
+
+.auto-attach-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ring-secondary-color);
+  border: 1px solid var(--ring-line-color);
+  vertical-align: middle;
+  cursor: default;
+}
+
+/* Badge follows the summary and stays visible when the summary is truncated */
+.issue-summary-with-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.issue-summary-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auto-attach-badge-wrap {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.auto-attach-limit {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--ring-warning-color);
+}
+
+/* Planned Issues section: title with the "Issue IDs | Auto-attach filter" switch */
+.planned-issues-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ring-unit);
+  margin-bottom: var(--ring-unit);
+}
+
+.planned-issues-title {
+  font-weight: 600;
+}
+
+.auto-attach-help {
+  margin-top: var(--ring-unit);
+  font-size: 12px;
+  color: var(--ring-secondary-color);
+}

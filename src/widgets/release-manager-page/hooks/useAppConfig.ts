@@ -6,6 +6,7 @@ interface AppConfig {
     manualIssueManagement: boolean;
     metaIssuesEnabled: boolean;
     customFieldsMapping: boolean;
+    autoAttachByFilter: boolean;
 }
 
 // --- Module-level cache to ensure the config is fetched only once per session ---
@@ -19,7 +20,8 @@ export function useAppConfig(api: API) {
     const [config, setConfig] = useState<AppConfig>({
         manualIssueManagement: false,
         metaIssuesEnabled: false,
-        customFieldsMapping: false
+        customFieldsMapping: false,
+        autoAttachByFilter: false
     });
 
     useEffect(() => {
@@ -53,7 +55,8 @@ export function useAppConfig(api: API) {
                     const cfg: AppConfig = {
                         manualIssueManagement,
                         metaIssuesEnabled,
-                        customFieldsMapping
+                        customFieldsMapping,
+                        autoAttachByFilter: !!appConfig.autoAttachByFilter
                     };
                     cachedAppConfig = cfg;
                     return cfg;

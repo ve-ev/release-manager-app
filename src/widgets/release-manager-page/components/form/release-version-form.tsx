@@ -5,7 +5,7 @@ import ErrorMessage from '@jetbrains/ring-ui-built/components/error-message/erro
 import {H3} from '@jetbrains/ring-ui-built/components/heading/heading';
 import LoaderInline from '@jetbrains/ring-ui-built/components/loader-inline/loader-inline';
 // Import host from app.tsx instead of registering a new instance
-import {host} from '../../app.tsx';
+import {api, host} from '../../app.tsx';
 import '../../styles/release-version-form.css';
 import FormFields from './fields/form-fields.tsx';
 import {ReleaseVersion, PlannedOrMetaIssue} from '../../interfaces';
@@ -13,6 +13,7 @@ import MetaIssueForm, { MetaIssueData } from './meta-issue-form.tsx';
 import {validateReleaseVersion} from '../../utils/validation-helpers';
 import {useIssueSearch} from '../../hooks';
 import {generateClientId} from '../../utils/id-generator';
+import AutoAttachFilter from './auto-attach-filter.tsx';
 
 // Define the form props
 interface ReleaseVersionFormProps {
@@ -22,6 +23,8 @@ interface ReleaseVersionFormProps {
   metaIssuesEnabled?: boolean;
   initialShowMetaIssueForm?: boolean;
   existingReleaseVersions?: ReleaseVersion[];
+  autoAttachByFilter?: boolean;
+  customFieldsMapping?: boolean;
 }
 
 // Import CSS classes
@@ -53,7 +56,7 @@ const styles = {
 // All form field components have been moved to separate files in the components directory
 
 // eslint-disable-next-line complexity
-const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, onSave, onCancel, metaIssuesEnabled, initialShowMetaIssueForm, existingReleaseVersions}) => {
+const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, onSave, onCancel, metaIssuesEnabled, initialShowMetaIssueForm, existingReleaseVersions, autoAttachByFilter, customFieldsMapping}) => {
   // Initialize form state
   const [formData, setFormData] = useState<ReleaseVersion>({
     id: '',  // Empty id for new release versions
@@ -166,6 +169,21 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
       }));
     }
   }, [linkedIssuesInput, formData.plannedIssues, searchIssues]);
+
+  // Update the filter-added issues from the current filter (same rules as "Sync now", nothing is saved):
+  // add new matches, drop filter-added issues that no longer match unless hidden from the user, keep manual issues
+  const handleSyncFilterMatches = useCallback(async (query: string) => {
+    const planned = formData.plannedIssues || [];
+    const filterIds = planned.filter(p => p.source === 'filter').map(p => p.id);
+    const {issues, hiddenIds} = await api.getAutoAttachMatches(query, filterIds);
+    const keepIds = new Set([...issues.map(i => i.id), ...hiddenIds]);
+    const kept = planned.filter(p => p.source !== 'filter' || keepIds.has(p.id));
+    const added = issues
+      .filter(i => !planned.some(p => p.id === i.id))
+      .map(i => ({...i, source: 'filter' as const}));
+    setFormData(prev => ({...prev, plannedIssues: [...kept, ...added]}));
+    return {added: added.length, removed: planned.length - kept.length};
+  }, [formData.plannedIssues]);
 
   // Handle removing an issue from the list
   const handleRemoveIssue = useCallback((issueId: string) => {
@@ -345,6 +363,15 @@ const ReleaseVersionForm: React.FC<ReleaseVersionFormProps> = ({releaseVersion, 
           ) : undefined}
           onEditMetaIssue={handleEditMetaIssueClick}
           existingReleaseVersions={existingReleaseVersions}
+          autoAttachFilter={autoAttachByFilter ? (
+            <AutoAttachFilter
+              value={formData.autoAttachQuery || ''}
+              // Empty input clears the filter; whitespace is sent so the backend rejects it
+              onChange={value => setFormData(prev => ({...prev, autoAttachQuery: value || undefined}))}
+              onSyncMatches={handleSyncFilterMatches}
+              disabledReason={customFieldsMapping ? 'Not available while Custom Field Sync is on.' : undefined}
+            />
+          ) : undefined}
         />
 
         <Panel className={styles.formPanel}>

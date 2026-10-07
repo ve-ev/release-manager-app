@@ -268,6 +268,9 @@
 }
 
 .tree-view-controller {
+  /* Each row is its own grid, so the ID column needs a fixed minimum width to keep summaries aligned.
+     ponytail: IDs wider than 120px still push their summary; raise the minimum if projects use long keys */
+  --linked-issue-id-col: minmax(calc(var(--ring-unit) * 15), max-content);
   display: grid;
   column-gap: var(--ring-unit);
   align-items: center; /* align elements consistently */
@@ -283,12 +286,12 @@
 
 /* With controls: reserve fixed column for controls */
 .tree-view-controller.has-controls {
-  grid-template-columns: calc(var(--ring-unit) * 2) max-content minmax(0, 1fr) minmax(180px, max-content) 150px;
+  grid-template-columns: calc(var(--ring-unit) * 2) var(--linked-issue-id-col) minmax(0, 1fr) minmax(180px, max-content) 150px;
 }
 
 /* Without controls: do not reserve space for controls */
 .tree-view-controller.no-controls {
-  grid-template-columns: calc(var(--ring-unit) * 2) max-content minmax(0, 1fr) minmax(180px, max-content);
+  grid-template-columns: calc(var(--ring-unit) * 2) var(--linked-issue-id-col) minmax(0, 1fr) minmax(180px, max-content);
 }
 
 /* Ensure controls occupy the full width of the last grid column and are right-aligned */
@@ -421,7 +424,7 @@
   display: none;
 }
 .linked-issue-item.discoped .tree-view-controller {
-  grid-template-columns: calc(var(--ring-unit) * 2) max-content minmax(0, 1fr) 150px;
+  grid-template-columns: calc(var(--ring-unit) * 2) var(--linked-issue-id-col) minmax(0, 1fr) 150px;
 }
 
 /* Styles for the combined expandable content section */

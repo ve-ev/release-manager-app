@@ -52,6 +52,8 @@ export interface PlannedOrMetaIssue {
   // Meta issue support: when present, this item represents a meta issue aggregating related issue IDs
   isMeta?: boolean;
   metaRelatedIssueIds?: string[];
+  /** How the issue was added. Missing means 'manual'. */
+  source?: 'manual' | 'filter';
 }
 
 export interface MetaIssue {
@@ -108,9 +110,13 @@ export interface ReleaseAuditEvent {
     | 'RELEASE_COMPLETED'
     | 'SNAPSHOT_REGENERATED'
     | 'PLANNED_ISSUES_CHANGED'
-    | 'DESCRIPTION_CHANGED';
+    | 'DESCRIPTION_CHANGED'
+    | 'AUTO_ATTACHED'
+    | 'AUTO_DETACHED';
   at: string;
   by?: string;
+  /** For `AUTO_ATTACHED` / `AUTO_DETACHED`: login of the user whose action started the filter run. */
+  triggeredBy?: string;
   /** Release identifier for cross-referencing audit entries (optional for backward compatibility). */
   releaseId?: string;
   /** Human-readable release version (optional for backward compatibility). */
@@ -155,6 +161,10 @@ export interface ReleaseVersion {
   // Dedicated meta issues collection (used by form); renderer may merge it into planned issues
   metaIssues?: MetaIssue[];
   additionalInfo?: string;
+  /** YouTrack search query; matching issues are added to plannedIssues with source 'filter'. */
+  autoAttachQuery?: string;
+  /** Set by the workflow when the filter wants to add more than the per-release limit. */
+  autoAttachLimitReached?: boolean;
 }
 
 /**

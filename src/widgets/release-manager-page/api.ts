@@ -326,6 +326,25 @@ export class API {
     });
   }
 
+  // ----- Auto-attach by filter -----
+  async previewAutoAttach(query: string): Promise<{ count: number; limit: number; project: string }> {
+    return this.fetchJson<{ count: number; limit: number; project: string }>(`backend/auto-attach-preview?query=${encodeURIComponent(query)}`);
+  }
+
+  async getAutoAttachMatches(query: string, filterIssueIds: string[]): Promise<{ issues: Array<{ id: string; summary: string }>; hiddenIds: string[] }> {
+    return this.fetchJson<{ issues: Array<{ id: string; summary: string }>; hiddenIds: string[] }>('backend/auto-attach-matches', {
+      method: 'POST',
+      body: { query, filterIssueIds }
+    });
+  }
+
+  async syncAutoAttach(releaseId: string): Promise<{ added: number; removed: number }> {
+    return this.fetchJson<{ added: number; removed: number }>('backend/auto-attach-sync', {
+      method: 'POST',
+      body: { releaseId }
+    });
+  }
+
   async refreshCalendarData(): Promise<void> {
     try {
       await this.host.fetchApp('backend/refresh-calendar-data', {

@@ -1026,6 +1026,12 @@ function updateReleaseById(ctx, id, updatedReleaseVersion) {
 
     // Preserve id
     updatedReleaseVersion.id = id;
+
+    const filterError = applyAutoAttachOnSave(ctx, prev, updatedReleaseVersion);
+    if (filterError) {
+        sendErrorResponse(ctx, filterError.code, filterError.message);
+        return null;
+    }
     releaseVersions[index] = updatedReleaseVersion;
 
     if (!saveReleaseVersions(ctx, releaseVersions)) { return null; }
@@ -1180,6 +1186,227 @@ function updateReleasesForIssue(ctx, issue, values) {
 }
 
 /**
+ * Auto-attach by filter: one YouTrack search query per release. Matching issues are added
+ * to plannedIssues with source 'filter'; only those are ever removed by the filter.
+ */
+const AUTO_ATTACH_LIMIT = 256;
+const AUTO_ATTACH_BY = 'auto-attach filter';
+
+/* eslint-disable no-console */
+function logAutoAttach(issueId, message) {
+    console.log('release-manager/auto-attach: ' + issueId + ' - ' + message);
+}
+/* eslint-enable no-console */
+
+/**
+ * Filter mode works only when the flag is on and Custom Field Sync is off.
+ * @param {Object} ctx
+ * @returns {boolean}
+ */
+function isAutoAttachEnabled(ctx) {
+    const settings = ctx.settings || {};
+    return !!settings.autoAttachByFilter && !settings.customFieldsMapping;
+}
+
+/**
+ * @param {Object} ctx
+ * @returns {boolean}
+ */
+function isLightManager(ctx) {
+    try {
+        const settings = ctx.settings || {};
+        if (!settings.lightManagers) { return false; }
+        return settings.lightManagers.find(function (lm) {
+            return ctx.currentUser && ctx.currentUser.isInGroup && ctx.currentUser.isInGroup(lm.name);
+        }) != null;
+    } catch {
+        return false;
+    }
+}
+
+function isReleaseLocked(rv) {
+    return !!rv.freezeConfirmed || rv.status === 'Released';
+}
+
+function countFilterIssues(planned) {
+    return planned.filter(function (it) { return it && it.source === 'filter'; }).length;
+}
+
+function pushAutoAttachAudit(rv, user, type, issues) {
+    if (issues.length === 0) { return; }
+    const events = Array.isArray(rv.auditEvents) ? rv.auditEvents : [];
+    const event = {
+        type: type,
+        at: new Date().toISOString(),
+        by: AUTO_ATTACH_BY,
+        triggeredBy: (user && (user.login || user.name)) || undefined,
+        releaseId: rv.id,
+        releaseVersion: rv.version || rv.id
+    };
+    event[type === 'AUTO_ATTACHED' ? 'addedPlannedIssues' : 'removedPlannedIssues'] = issues;
+    events.push(event);
+    rv.auditEvents = events;
+}
+
+/**
+ * Runs the release filter as ctx.currentUser. Throws an Error with a user-facing message
+ * when the query fails or matches more than AUTO_ATTACH_LIMIT issues.
+ * @returns {Object} the search result Set
+ */
+function searchFilter(ctx, query) {
+    let found;
+    try {
+        found = search.search(ctx.project, query, ctx.currentUser);
+    } catch (e) {
+        throw new Error('The auto-attach filter is not valid: ' + (e && (e.message || e)));
+    }
+    if (found.size > AUTO_ATTACH_LIMIT) {
+        throw new Error('The auto-attach filter matches ' + found.size + ' issues. The limit is ' +
+            AUTO_ATTACH_LIMIT + '. Make the filter narrower.');
+    }
+    return found;
+}
+
+/**
+ * Full sync of one release with its filter (on save and on Sync now). Mutates rv.
+ * Adds new matches, removes filter-added issues that no longer match and that
+ * the current user can see. Manual issues are never removed.
+ * @returns {{added: number, removed: number}}
+ */
+function syncReleaseWithFilter(ctx, rv) {
+    const found = searchFilter(ctx, rv.autoAttachQuery);
+    const planned = Array.isArray(rv.plannedIssues) ? rv.plannedIssues.slice() : [];
+    const plannedIds = {};
+    planned.forEach(function (it) { if (it && it.id) { plannedIds[it.id] = true; } });
+
+    const matchIds = {};
+    const added = [];
+    found.forEach(function (issue) {
+        matchIds[issue.id] = true;
+        if (!plannedIds[issue.id]) {
+            planned.push({ id: issue.id, summary: issue.summary || '', source: 'filter' });
+            added.push({ id: issue.id, summary: issue.summary || '' });
+        }
+    });
+
+    const removed = [];
+    rv.plannedIssues = planned.filter(function (it) {
+        if (!it || it.source !== 'filter' || matchIds[it.id]) { return true; }
+        const issue = entities.Issue.findById(it.id);
+        if (issue && !issue.isVisibleTo(ctx.currentUser)) { return true; }
+        removed.push({ id: it.id, summary: it.summary || '' });
+        return false;
+    });
+    delete rv.autoAttachLimitReached;
+
+    pushAutoAttachAudit(rv, ctx.currentUser, 'AUTO_ATTACHED', added);
+    pushAutoAttachAudit(rv, ctx.currentUser, 'AUTO_DETACHED', removed);
+    return { added: added.length, removed: removed.length };
+}
+
+/**
+ * Validates and applies the auto-attach filter of a release that is about to be saved. Mutates rv.
+ * @param {Object} ctx
+ * @param {Object|null} prev stored release, or null for a new one
+ * @param {Object} rv release from the request
+ * @returns {{code: number, message: string}|null} error, or null when the save can continue
+ */
+function applyAutoAttachOnSave(ctx, prev, rv) {
+    const prevQuery = (prev && prev.autoAttachQuery) || null;
+
+    if (rv.autoAttachQuery === undefined || rv.autoAttachQuery === null) {
+        if (prevQuery) {
+            // Filter cleared: filter-added issues stay as manual issues
+            (rv.plannedIssues || []).forEach(function (it) { if (it) { delete it.source; } });
+        }
+        delete rv.autoAttachQuery;
+        delete rv.autoAttachLimitReached;
+        return null;
+    }
+
+    if (typeof rv.autoAttachQuery !== 'string' || !rv.autoAttachQuery.trim()) {
+        return { code: HTTP_STATUS.BAD_REQUEST, message: 'The auto-attach filter must not be empty' };
+    }
+    rv.autoAttachQuery = rv.autoAttachQuery.trim();
+    if (rv.autoAttachQuery === prevQuery) { return null; }
+
+    if (!isAutoAttachEnabled(ctx)) {
+        return {
+            code: HTTP_STATUS.BAD_REQUEST,
+            message: ctx.settings && ctx.settings.customFieldsMapping
+                ? 'The auto-attach filter is not available while Custom Field Sync is on'
+                : 'The auto-attach filter feature is disabled'
+        };
+    }
+    if (!isReleaseManager(ctx) && !isLightManager(ctx)) {
+        return { code: HTTP_STATUS.FORBIDDEN, message: 'Only release managers can change the auto-attach filter' };
+    }
+    if (isReleaseLocked(rv)) {
+        return { code: HTTP_STATUS.BAD_REQUEST, message: 'Release is frozen: the auto-attach filter cannot be changed' };
+    }
+
+    try {
+        syncReleaseWithFilter(ctx, rv);
+    } catch (e) {
+        return { code: HTTP_STATUS.BAD_REQUEST, message: e.message };
+    }
+    return null;
+}
+
+/**
+ * Workflow entry point: checks one issue against the filter of each open release.
+ * Runs in the async function after the issue change is committed.
+ * @param {Object} ctx
+ * @param {Object} issue
+ * @param {Object} user the user who changed the issue
+ */
+function autoAttachIssue(ctx, issue, user) {
+    if (!isAutoAttachEnabled(ctx) || !issue) { return; }
+    const releases = getReleaseVersions(ctx);
+    let changed = false;
+
+    releases.forEach(function (rv) {
+        if (!rv || !rv.autoAttachQuery || isReleaseLocked(rv)) { return; }
+
+        let matches;
+        try {
+            matches = search.search(ctx.project, '(' + rv.autoAttachQuery + ') and issue id: ' + issue.id, user).isNotEmpty();
+        } catch (e) {
+            logAutoAttach(issue.id, 'search failed for release ' + (rv.version || rv.id) + ': ' + (e && (e.message || e)));
+            return;
+        }
+
+        const planned = Array.isArray(rv.plannedIssues) ? rv.plannedIssues : [];
+        const idx = planned.findIndex(function (it) { return it && it.id === issue.id; });
+
+        if (matches && idx === -1) {
+            if (countFilterIssues(planned) >= AUTO_ATTACH_LIMIT) {
+                logAutoAttach(issue.id, 'WARNING filter limit reached for release ' + (rv.version || rv.id));
+                if (!rv.autoAttachLimitReached) {
+                    rv.autoAttachLimitReached = true;
+                    changed = true;
+                }
+                return;
+            }
+            const ref = { id: issue.id, summary: issue.summary || '' };
+            rv.plannedIssues = planned.concat([Object.assign({ source: 'filter' }, ref)]);
+            pushAutoAttachAudit(rv, user, 'AUTO_ATTACHED', [ref]);
+            changed = true;
+            logAutoAttach(issue.id, 'attached to release ' + (rv.version || rv.id));
+        } else if (!matches && idx !== -1 && planned[idx].source === 'filter') {
+            const ref = { id: issue.id, summary: planned[idx].summary || '' };
+            rv.plannedIssues = planned.filter(function (_it, i) { return i !== idx; });
+            delete rv.autoAttachLimitReached;
+            pushAutoAttachAudit(rv, user, 'AUTO_DETACHED', [ref]);
+            changed = true;
+            logAutoAttach(issue.id, 'detached from release ' + (rv.version || rv.id));
+        }
+    });
+
+    if (changed) { saveReleaseVersions(ctx, releases); }
+}
+
+/**
  * HTTP endpoints handler
  */
 exports.httpHandler = {
@@ -1195,6 +1422,7 @@ exports.httpHandler = {
                         manualIssueManagement: settings.manualIssueManagement || false,
                         metaIssuesEnabled: settings.metaIssuesEnabled || false,
                         customFieldsMapping: settings.customFieldsMapping || false,
+                        autoAttachByFilter: settings.autoAttachByFilter || false,
                     });
                 } catch (error) {
                     logError('Failed to get ff', error);
@@ -1378,6 +1606,12 @@ exports.httpHandler = {
                     // Generate ID for new release version
                     releaseVersion.id = Date.now().toString();
 
+                    const filterError = applyAutoAttachOnSave(ctx, null, releaseVersion);
+                    if (filterError) {
+                        sendErrorResponse(ctx, filterError.code, filterError.message);
+                        return;
+                    }
+
                     // Add to release versions and save
                     releaseVersions.push(releaseVersion);
 
@@ -1535,6 +1769,145 @@ exports.httpHandler = {
                     }
                 } catch (error) {
                     logError('Failed to delete release version', error);
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
+                }
+            }
+        },
+        /**
+         * GET /auto-attach-preview?query= - Count issues that match a filter (current user's view)
+         */
+        {
+            method: 'GET',
+            path: 'auto-attach-preview',
+            scope: 'project',
+            handle: function handle(ctx) {
+                try {
+                    if (!isReleaseManager(ctx) && !isLightManager(ctx)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can preview the auto-attach filter');
+                        return;
+                    }
+                    const query = (ctx.request.getParameter('query') || '').trim();
+                    if (!query) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'The auto-attach filter must not be empty');
+                        return;
+                    }
+                    let found;
+                    try {
+                        found = search.search(ctx.project, query, ctx.currentUser);
+                    } catch (e) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'The auto-attach filter is not valid: ' + (e && (e.message || e)));
+                        return;
+                    }
+                    ctx.response.json({ count: found.size, limit: AUTO_ATTACH_LIMIT, project: ctx.project.shortName });
+                } catch (error) {
+                    logError('Failed to preview auto-attach filter', error);
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
+                }
+            }
+        },
+        /**
+         * POST /auto-attach-matches - Matches for the release form (nothing is saved)
+         * Body: { query: string, filterIssueIds: string[] } - filterIssueIds are the form's filter-added issues.
+         * Returns { issues, hiddenIds }: the matches (at most AUTO_ATTACH_LIMIT, only issues the current user
+         * can see), and the filterIssueIds that do not match but are hidden from the user, so the form keeps them.
+         * hiddenIds only includes IDs already stored as filter-added in this project's releases.
+         */
+        {
+            method: 'POST',
+            path: 'auto-attach-matches',
+            scope: 'project',
+            handle: function handle(ctx) {
+                try {
+                    if (!isReleaseManager(ctx) && !isLightManager(ctx)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can run the auto-attach filter');
+                        return;
+                    }
+                    const body = ctx.request.json() || {};
+                    const query = (typeof body.query === 'string' ? body.query : '').trim();
+                    if (!query) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'The auto-attach filter must not be empty');
+                        return;
+                    }
+                    let matches;
+                    try {
+                        matches = searchFilter(ctx, query);
+                    } catch (e) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, e.message);
+                        return;
+                    }
+                    const issues = [];
+                    const matchIds = {};
+                    matches.forEach(function (issue) {
+                        matchIds[issue.id] = true;
+                        issues.push({ id: issue.id, summary: issue.summary || '' });
+                    });
+                    // Check only IDs that this project's releases already store as filter-added. Any other ID
+                    // would let the caller probe whether arbitrary hidden issues exist.
+                    const storedFilterIds = {};
+                    getReleaseVersions(ctx).forEach(function (rv) {
+                        (rv && Array.isArray(rv.plannedIssues) ? rv.plannedIssues : []).forEach(function (it) {
+                            if (it && it.source === 'filter') { storedFilterIds[it.id] = true; }
+                        });
+                    });
+                    const hiddenIds = (Array.isArray(body.filterIssueIds) ? body.filterIssueIds : []).filter(function (id) {
+                        if (typeof id !== 'string' || matchIds[id] || !storedFilterIds[id]) { return false; }
+                        const issue = entities.Issue.findById(id);
+                        return !!issue && !issue.isVisibleTo(ctx.currentUser);
+                    });
+                    ctx.response.json({ issues: issues, hiddenIds: hiddenIds });
+                } catch (error) {
+                    logError('Failed to get auto-attach matches', error);
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
+                }
+            }
+        },
+        /**
+         * POST /auto-attach-sync - Run the release filter again
+         * Body: { releaseId: string }. Returns { added, removed }.
+         */
+        {
+            method: 'POST',
+            path: 'auto-attach-sync',
+            scope: 'project',
+            handle: function handle(ctx) {
+                try {
+                    if (!isAutoAttachEnabled(ctx)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'The auto-attach filter feature is disabled');
+                        return;
+                    }
+                    if (!isReleaseManager(ctx) && !isLightManager(ctx)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can sync the auto-attach filter');
+                        return;
+                    }
+                    const body = ctx.request.json();
+                    const releases = getReleaseVersions(ctx);
+                    const rv = releases.find(function (r) { return r && r.id === (body && body.releaseId); });
+                    if (!rv) {
+                        sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Release version not found');
+                        return;
+                    }
+                    if (!rv.autoAttachQuery) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Release has no auto-attach filter');
+                        return;
+                    }
+                    if (isReleaseLocked(rv)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Release is frozen: issues list cannot be changed after freeze');
+                        return;
+                    }
+                    let result;
+                    try {
+                        result = syncReleaseWithFilter(ctx, rv);
+                    } catch (e) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, e.message);
+                        return;
+                    }
+                    if (!saveReleaseVersions(ctx, releases)) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'Failed to save release version');
+                        return;
+                    }
+                    ctx.response.json(result);
+                } catch (error) {
+                    logError('Failed to sync auto-attach filter', error);
                     sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
                 }
             }
@@ -1982,3 +2355,4 @@ exports.updateReleasesForIssueByVersion = updateReleasesForIssue;
 exports.addIssueToRelease = addIssueToRelease;
 exports.removeIssueFromOtherReleases = removeIssueFromOtherReleases;
 exports.getAppSettings = getAppSettings;
+exports.autoAttachIssue = autoAttachIssue;

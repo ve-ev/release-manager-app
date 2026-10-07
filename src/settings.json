@@ -36,6 +36,11 @@
       "title": "Feature: Custom Field Sync",
       "description": "When enabled, a 'Custom Field Mapping' section appears in the project's app settings. Configure a YouTrack enum or build-type custom field to act as the release assignment field: when a user changes that field on an issue, the workflow automatically adds or removes the issue from the corresponding release. Requires the 'Update Releases on Custom Field Change' workflow to be active in the project.",
       "type": "boolean"
+    },
+    "autoAttachByFilter": {
+      "title": "Feature: Auto-attach by Filter",
+      "description": "When enabled, a release can have a YouTrack search query. Issues in the project that match the query are added to the release's planned issues automatically, and are removed when they stop matching. Issues added by hand are never removed. Works only when 'Custom Field Sync' is off. Requires the 'Auto-attach Issues by Filter' workflow to be active in the project.",
+      "type": "boolean"
     }
   },
   "required": [

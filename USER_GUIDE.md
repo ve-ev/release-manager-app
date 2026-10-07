@@ -95,6 +95,23 @@ When enabled, a **Custom Field Mapping** section appears in the project's app se
 
 **Requires:** The **Update Releases on Custom Field Change** workflow must be active in your project (see Workflow Setup below).
 
+### Auto-attach by Filter
+
+When enabled, the release form shows an **Auto-attach filter** input under Planned Issues. Type a YouTrack search query, for example `tag: release-2.0 Type: Bug`. The form shows how many issues match the query.
+
+- When you save the release, the app adds all issues in the project that match the filter. These issues show an **auto** badge.
+- When an issue changes and now matches the filter, the app adds it to the release. When an issue that the filter added stops matching, the app removes it. This occurs a few seconds after the change.
+- The filter never removes issues that you added by hand.
+- **Sync now** in the release **Actions** menu runs the filter again.
+- When you clear the filter, the issues that it added stay in the release as manual issues.
+- Frozen and released releases do not change.
+
+**Limits:**
+- One filter can add a maximum of 256 issues to one release. If the filter matches more issues when you save or select **Sync now**, the app adds nothing and shows an error. If the limit is reached when an issue changes, the release shows **Filter limit reached**.
+- The filter works only when **Custom Field Sync** is off.
+
+**Requires:** YouTrack 2026.2 or later. The **Auto-attach Issues by Filter** workflow must be active in your project (see Workflow Setup below).
+
 ---
 
 ## Workflow Setup
@@ -112,3 +129,7 @@ Enable this workflow when you have configured a **Release Field** in Custom Fiel
 3. Enable it
 
 Once active, whenever an issue's configured release field changes, the workflow adds the issue to the new release and removes it from the old one. A guard prevents infinite loops if Release Manager itself triggers a field update.
+
+### Auto-attach Issues by Filter
+
+Enable the **Auto-attach Issues by Filter** workflow in the same way when you use the **Auto-attach by Filter** feature. The workflow checks each changed issue against the filters of the open releases.
