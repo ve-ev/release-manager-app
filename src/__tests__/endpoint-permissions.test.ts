@@ -82,23 +82,64 @@ describe('custom-field-set', () => {
   });
 });
 
+function makeProject(releases: unknown[]) {
+  return {shortName: 'DEMO', extensionProperties: {releases: JSON.stringify(releases)} as Record<string, string>, findFieldByName: () => null};
+}
+
+function putRelease(project: ReturnType<typeof makeProject>, body: Record<string, unknown>) {
+  const endpoint = endpoints.find(e => e.method === 'PUT' && e.path === 'release')!;
+  let responseBody: {revision?: number} = {};
+  const ctx = {
+    settings: {releaseManagers: [{name: 'rm'}]},
+    currentUser: {login: 'u', isInGroup: (g: string) => g === 'rm'},
+    project,
+    request: {json: () => body, getParameter: () => '1'},
+    response: {code: 200, json: (b: {revision?: number}) => { responseBody = b; }}
+  };
+  endpoint.handle(ctx);
+  return {code: ctx.response.code, body: responseBody};
+}
+
+const storedRelease = (project: ReturnType<typeof makeProject>) => JSON.parse(project.extensionProperties.releases)[0];
+const release = {id: '1', version: '1.0', releaseDate: '2026-01-01', status: 'Planning'};
+
 describe('audit events', () => {
   it('keeps only the newest events of a release on save', () => {
     const auditEvents = Array.from({length: 250}, (_, i) => ({type: 'STATUS_CHANGED', at: String(i)}));
-    const releases = [{id: '1', version: '1.0', releaseDate: '2026-01-01', status: 'Planning', auditEvents}];
-    const {project} = call('PUT', 'expanded-version', 'rm');
-    project.extensionProperties.releases = JSON.stringify(releases);
-    const endpoint = endpoints.find(e => e.method === 'PUT' && e.path === 'release')!;
-    const ctx = {
-      settings: {releaseManagers: [{name: 'rm'}]},
-      currentUser: {login: 'u', isInGroup: (g: string) => g === 'rm'},
-      project,
-      request: {json: () => ({...releases[0], auditEvents: undefined, description: 'x'}), getParameter: () => '1'},
-      response: {code: 200, json: () => {}}
-    };
-    endpoint.handle(ctx);
-    const saved = JSON.parse(project.extensionProperties.releases)[0].auditEvents;
+    const project = makeProject([{...release, auditEvents}]);
+    expect(putRelease(project, {...release, description: 'x'}).code).toBe(200);
+    const saved = storedRelease(project).auditEvents;
     expect(saved).toHaveLength(200);
     expect(saved[saved.length - 1].type).toBe('DESCRIPTION_CHANGED');
+  });
+});
+
+describe('release revisions', () => {
+  it('treats a release saved before revisions existed as revision 0 and increments it on change', () => {
+    const project = makeProject([release]);
+    const {code, body} = putRelease(project, {...release, revision: 0, description: 'x'});
+    expect(code).toBe(200);
+    expect(body.revision).toBe(1);
+    expect(storedRelease(project).revision).toBe(1);
+  });
+
+  it('rejects a save based on a stale revision and keeps the stored release', () => {
+    const project = makeProject([{...release, revision: 3, plannedIssues: [{id: 'DEMO-1'}]}]);
+    expect(putRelease(project, {...release, revision: 2, plannedIssues: []}).code).toBe(409);
+    expect(storedRelease(project).plannedIssues).toEqual([{id: 'DEMO-1'}]);
+  });
+
+  it('accepts a save without a revision (a client loaded before the update)', () => {
+    const project = makeProject([{...release, revision: 3}]);
+    expect(putRelease(project, {...release, description: 'x'}).code).toBe(200);
+    expect(storedRelease(project).revision).toBe(4);
+  });
+
+  it('increments the revision when a workflow changes the release', () => {
+    const project = makeProject([{...release, revision: 3}]);
+    const addIssueToRelease = (moduleExports as unknown as {addIssueToRelease: (ctx: unknown, releaseId: string, issueId: string) => void}).addIssueToRelease;
+    addIssueToRelease({project}, '1', 'DEMO-1');
+    expect(storedRelease(project).revision).toBe(4);
+    expect(putRelease(project, {...release, revision: 3}).code).toBe(409);
   });
 });

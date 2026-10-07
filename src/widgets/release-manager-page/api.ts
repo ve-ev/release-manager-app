@@ -6,6 +6,18 @@ import {logger} from './utils/logger';
 
 let cachedSettings: unknown | undefined;
 let cachedSettingsPromise: Promise<unknown> | null = null;
+// Revisions produced by this client's own saves: release id -> (revision sent -> revision returned).
+// A component that still holds the copy it saved can save again without a false conflict.
+const ownRevisions = new Map<string, Map<number, number>>();
+
+function latestOwnRevision(id: string, revision: number): number {
+  const chain = ownRevisions.get(id);
+  let current = revision;
+  while (chain?.has(current)) {
+    current = chain.get(current)!;
+  }
+  return current;
+}
 
 export class API {
   constructor(private host: HostAPI) {}
@@ -129,11 +141,21 @@ export class API {
       throw new Error('Release version ID is required for update');
     }
 
-    return this.host.fetchApp(`backend/release?id=${releaseVersion.id}`, {
+    const sentRevision = typeof releaseVersion.revision === 'number'
+      ? latestOwnRevision(releaseVersion.id, releaseVersion.revision)
+      : undefined;
+    const updated = await this.host.fetchApp(`backend/release?id=${releaseVersion.id}`, {
       method: 'PUT',
-      body: releaseVersion,
+      body: {...releaseVersion, revision: sentRevision},
       scope: true,
-    }) as Promise<ReleaseVersion>;
+    }) as ReleaseVersion;
+    if (sentRevision !== undefined && typeof updated?.revision === 'number' && updated.revision !== sentRevision) {
+      if (!ownRevisions.has(releaseVersion.id)) {
+        ownRevisions.set(releaseVersion.id, new Map());
+      }
+      ownRevisions.get(releaseVersion.id)!.set(sentRevision, updated.revision);
+    }
+    return updated;
   }
 
   /**
