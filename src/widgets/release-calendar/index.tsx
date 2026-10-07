@@ -7,7 +7,7 @@ import {App} from './app';
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <ControlsHeightContext.Provider value={ControlsHeight.S}>
-      <App />
+      <App/>
     </ControlsHeightContext.Provider>
   </React.StrictMode>
 );

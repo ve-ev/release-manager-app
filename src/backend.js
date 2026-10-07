@@ -163,7 +163,7 @@ function saveReleaseVersions(ctx, releaseVersions) {
 function persistCalendarSnapshot(ctx, releases) {
     try {
         // Simplified releases for the calendar
-        var calendarReleases = releases.map(function (r) {
+        const calendarReleases = releases.map(function (r) {
             return {
                 id: r.id,
                 version: r.version,
@@ -174,7 +174,7 @@ function persistCalendarSnapshot(ctx, releases) {
             };
         });
 
-        var snapshot = {
+        const snapshot = {
             projectShortName: ctx.project.shortName || '',
             projectName: ctx.project.name || ctx.project.shortName || '',
             releases: calendarReleases
@@ -183,25 +183,25 @@ function persistCalendarSnapshot(ctx, releases) {
 
         // Only add confirmed Release Managers to calendarViewers
         if (isReleaseManager(ctx)) {
-            var viewersJson = ctx.project.extensionProperties.calendarViewers;
-            var viewers = viewersJson ? JSON.parse(viewersJson) : [];
+            const viewersJson = ctx.project.extensionProperties.calendarViewers;
+            let viewers = viewersJson ? JSON.parse(viewersJson) : [];
             if (!Array.isArray(viewers)) { viewers = []; }
-            var login = ctx.currentUser && (ctx.currentUser.login || ctx.currentUser.name);
+            const login = ctx.currentUser && (ctx.currentUser.login || ctx.currentUser.name);
             if (login && viewers.indexOf(login) === -1) {
                 viewers.push(login);
-                var newViewersJson = JSON.stringify(viewers);
+                const newViewersJson = JSON.stringify(viewers);
                 ctx.project.extensionProperties.calendarViewers = newViewersJson;
                 // Also write via entities.Project path (same reason as persistReleaseManagerGroups)
                 try {
-                    var shortName2 = ctx.project && ctx.project.shortName;
+                    const shortName2 = ctx.project && ctx.project.shortName;
                     if (shortName2) {
-                        var pe2 = entities.Project.findByKey(shortName2);
+                        const pe2 = entities.Project.findByKey(shortName2);
                         if (pe2) {
                             pe2.extensionProperties.calendarViewers = newViewersJson;
                             pe2.extensionProperties.calendarSnapshot = JSON.stringify(snapshot);
                         }
                     }
-                } catch (e2) { /* ignore */ }
+                } catch { /* ignore */ }
                 log('[backend] persistCalendarSnapshot: added viewer=' + login + ' for project=' + (ctx.project && ctx.project.shortName));
             }
         }
@@ -219,15 +219,15 @@ function persistCalendarSnapshot(ctx, releases) {
 function persistUserRmProjects(ctx) {
     log('[backend] persistUserRmProjects: STARTING for project=' + (ctx.project && ctx.project.shortName));
     try {
-        var shortName = ctx.project && ctx.project.shortName;
+        const shortName = ctx.project && ctx.project.shortName;
         if (!shortName) {
             log('[backend] persistUserRmProjects: no shortName, skipping');
             return;
         }
 
-        var existing = [];
+        let existing = [];
         try {
-            var raw = ctx.globalStorage && ctx.globalStorage.extensionProperties && ctx.globalStorage.extensionProperties.rmProjectShortNames;
+            const raw = ctx.globalStorage && ctx.globalStorage.extensionProperties && ctx.globalStorage.extensionProperties.rmProjectShortNames;
             log('[backend] persistUserRmProjects: globalStorage raw=' + (raw || 'NOT SET'));
             if (raw) { existing = JSON.parse(raw); }
             if (!Array.isArray(existing)) { existing = []; }
@@ -257,24 +257,24 @@ function persistReleaseManagerGroups(ctx) {
     try {
         // Use forEach instead of Array.isArray — YouTrack settings return Java-backed
         // collections that are iterable but fail Array.isArray checks.
-        var groups = [];
-        var rmSetting = ctx.settings && ctx.settings.releaseManagers;
+        const groups = [];
+        const rmSetting = ctx.settings && ctx.settings.releaseManagers;
         if (rmSetting) {
             rmSetting.forEach(function (g) {
-                var name = g && (typeof g.name === 'string' ? g.name : null);
+                const name = g && (typeof g.name === 'string' ? g.name : null);
                 if (name) { groups.push(name); }
             });
         }
-        var groupsJson = JSON.stringify(groups);
+        const groupsJson = JSON.stringify(groups);
         // Write via ctx.project (project-scoped HTTP handler store)
         ctx.project.extensionProperties.releaseManagerGroups = groupsJson;
         // Also write via entities.Project.findByKey — the global backend reads from this entity path.
         // ctx.project.extensionProperties and entities.Project.findByKey().extensionProperties
         // use different underlying stores in YouTrack HTTP handlers.
         try {
-            var shortName = ctx.project && ctx.project.shortName;
+            const shortName = ctx.project && ctx.project.shortName;
             if (shortName) {
-                var projectEntity = entities.Project.findByKey(shortName);
+                const projectEntity = entities.Project.findByKey(shortName);
                 if (projectEntity) {
                     projectEntity.extensionProperties.releaseManagerGroups = groupsJson;
                 }
@@ -1562,15 +1562,15 @@ exports.httpHandler = {
             scope: 'project',
             handle: function handle(ctx) {
                 try {
-                    var userLogin = ctx.currentUser && ctx.currentUser.login;
-                    var projectShortName = ctx.project && ctx.project.shortName;
+                    const userLogin = ctx.currentUser && ctx.currentUser.login;
+                    const projectShortName = ctx.project && ctx.project.shortName;
                     log('[refresh-calendar-data] called by=' + userLogin + ' project=' + projectShortName + ' isRM=' + isReleaseManager(ctx));
                     if (!isReleaseManager(ctx)) {
                         ctx.response.code = HTTP_STATUS.FORBIDDEN;
                         ctx.response.json({ ok: false, reason: 'not a release manager' });
                         return;
                     }
-                    var releaseVersions = getReleaseVersions(ctx);
+                    const releaseVersions = getReleaseVersions(ctx);
                     persistCalendarSnapshot(ctx, releaseVersions);
                     persistReleaseManagerGroups(ctx);
                     persistUserRmProjects(ctx);
@@ -2065,10 +2065,10 @@ exports.httpHandler = {
             scope: 'project',
             handle: function handle(ctx) {
                 try {
-                    var projectId = '', shortName = '', name = '';
-                    try { projectId = ctx.project.id || ''; } catch(e) {}
-                    try { shortName = ctx.project.shortName || ctx.project.key || ''; } catch(e) {}
-                    try { name = ctx.project.name || ''; } catch(e) {}
+                    let projectId = ''; let shortName = ''; let name = '';
+                    try { projectId = ctx.project.id || ''; } catch { /* optional property */ }
+                    try { shortName = ctx.project.shortName || ctx.project.key || ''; } catch { /* optional property */ }
+                    try { name = ctx.project.name || ''; } catch { /* optional property */ }
                     ctx.response.json({ projectId: projectId || shortName, shortName: shortName, name: name });
                 } catch (error) {
                     logError('Failed to get project info', error);
@@ -2097,8 +2097,8 @@ exports.httpHandler = {
                     }
                     let fieldId = null;
                     let bundleId = null;
-                    try { fieldId = field.id || null; } catch(e) {}
-                    try { bundleId = (field.bundle && field.bundle.id) || null; } catch(e) {}
+                    try { fieldId = field.id || null; } catch { /* optional property */ }
+                    try { bundleId = (field.bundle && field.bundle.id) || null; } catch { /* optional property */ }
                     ctx.response.json({
                         found: true,
                         canonicalName: field.name || fieldName,

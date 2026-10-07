@@ -64,23 +64,26 @@ export function navigateMonth(year: number, month: number, delta: number): { yea
   return { year: d.getFullYear(), month: d.getMonth() };
 }
 
+export const MONTHS_PER_QUARTER = 3;
+export const MONTHS_PER_YEAR = 12;
+
 export function getQuarterMonths(year: number, quarter: number): Array<{ year: number; month: number }> {
-  const startMonth = quarter * 3;
-  return [0, 1, 2].map(offset => {
+  const startMonth = quarter * MONTHS_PER_QUARTER;
+  return Array.from({length: MONTHS_PER_QUARTER}, (_, offset) => offset).map(offset => {
     const d = new Date(year, startMonth + offset, 1);
     return { year: d.getFullYear(), month: d.getMonth() };
   });
 }
 
 export function getQuarterFromMonth(month: number): number {
-  return Math.floor(month / 3);
+  return Math.floor(month / MONTHS_PER_QUARTER);
 }
 
 export function getReleaseMarkerColor(event: CalendarEvent): string {
-  if (event.type === 'freeze') return 'var(--ring-main-color)'; // blue
-  if (event.status === 'Canceled') return 'var(--ring-error-color)';
-  if (event.status === 'Released') return 'var(--ring-secondary-color)';
+  if (event.type === 'freeze') {return 'var(--ring-main-color)';} // blue
+  if (event.status === 'Canceled') {return 'var(--ring-error-color)';}
+  if (event.status === 'Released') {return 'var(--ring-secondary-color)';}
   // Overdue: past the release date but not yet Released or Canceled
-  if (event.date < new Date()) return 'var(--ring-error-color)';
+  if (event.date < new Date()) {return 'var(--ring-error-color)';}
   return 'var(--ring-success-color)';
 }

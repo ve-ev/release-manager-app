@@ -48,6 +48,7 @@
   align-items: center;
 }
 .rc-project-chip {
+  font-family: inherit;
   border-radius: 100px;
   padding: 0 12px;
   font-size: 12px;
@@ -102,6 +103,14 @@
   cursor: pointer;
   transition: color 0.15s ease-out;
   display: inline-block;
+}
+button.rc-month-title {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
 }
 .rc-month-title--clickable:hover {
   color: var(--ring-main-color);

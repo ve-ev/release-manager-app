@@ -64,18 +64,18 @@ function isUserRmForProject(project, currentUser) {
 
         log('    currentUser.login = ' + (currentUser && currentUser.login));
 
-        for (var i = 0; i < groups.length; i++) {
-            var groupName = groups[i];
+        for (let i = 0; i < groups.length; i++) {
+            const groupName = groups[i];
             // Try isInGroup
             try {
-                var inGroupResult = currentUser.isInGroup && currentUser.isInGroup(groupName);
+                const inGroupResult = currentUser.isInGroup && currentUser.isInGroup(groupName);
                 log('    isInGroup("' + groupName + '") = ' + inGroupResult);
                 if (inGroupResult) { return true; }
             } catch (e1) { log('    isInGroup threw: ' + (e1 && e1.message)); }
             // Try iterating currentUser.groups
             try {
-                var matched = false;
-                var groupsCount = 0;
+                let matched = false;
+                let groupsCount = 0;
                 currentUser.groups.forEach(function (g) {
                     groupsCount++;
                     if (g && g.name === groupName) { matched = true; }
@@ -330,7 +330,7 @@ exports.httpHandler = {
                     log('  globalStorage.rmProjectShortNames=' + (shortNamesRaw || 'NOT SET'));
                     var shortNames = [];
                     if (shortNamesRaw) {
-                        try { shortNames = JSON.parse(shortNamesRaw); } catch (e) { shortNames = []; }
+                        try { shortNames = JSON.parse(shortNamesRaw); } catch { shortNames = []; }
                         if (!Array.isArray(shortNames)) { shortNames = []; }
                     }
 
@@ -410,7 +410,7 @@ exports.httpHandler = {
                                 projectName: projectName,
                                 releases: calendarReleases
                             });
-                        } catch (e) {
+                        } catch {
                             // project not found or inaccessible — skip silently
                         }
                     }

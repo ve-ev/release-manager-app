@@ -1,5 +1,5 @@
 import type { EmbeddableWidgetAPI } from '../../../@types/globals';
-import type { CalendarConfig, CalendarReleaseItem, ProjectReleases, YouTrackProject } from './interfaces';
+import type { CalendarConfig, ProjectReleases, YouTrackProject } from './interfaces';
 
 const STORAGE_KEY_CACHE = 'rm-calendar-cache';
 const STORAGE_KEY_CONFIG = 'rm-calendar-config';

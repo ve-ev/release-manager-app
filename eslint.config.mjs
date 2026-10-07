@@ -61,4 +61,24 @@ export default tseslint.config(
       },
     },
   },
+  {
+    // Test fixtures use literal values by design
+    files: ["**/__tests__/**", "**/*.test.{ts,tsx}"],
+    rules: {
+      "no-magic-numbers": "off",
+    },
+  },
+  {
+    // Node CLI scripts: console output is their interface
+    files: ["scripts/**/*.js"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      "no-console": "off",
+      "no-magic-numbers": "off",
+    },
+  },
 );

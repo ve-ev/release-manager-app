@@ -246,7 +246,7 @@ export class API {
         if (info.bundleId) { resolvedBundleId = info.bundleId; }
       }
       logger.debug('syncVersionBundleElement: field-bundle-info', { found: info?.found, canonicalName: info?.canonicalName, fieldId: info?.fieldId, bundleId: info?.bundleId });
-    } catch (e) {
+    } catch {
       logger.debug('syncVersionBundleElement: field-bundle-info lookup failed, proceeding with REST API name match only');
     }
 

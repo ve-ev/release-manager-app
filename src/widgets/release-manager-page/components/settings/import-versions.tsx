@@ -5,6 +5,18 @@ import Checkbox from '@jetbrains/ring-ui-built/components/checkbox/checkbox';
 import {api} from '../../app';
 import {ReleaseVersion} from '../../interfaces';
 
+const OPACITY_EXISTS = 0.6;
+const OPACITY_WILL_IMPORT = 1;
+const OPACITY_SKIPPED = 0.7;
+const OPACITY_EXCLUDED = 0.4;
+
+function getRowStatus(alreadyExists: boolean, included: boolean, isSelected: boolean): { status: string; opacity: number } {
+  if (alreadyExists) { return { status: 'Already exists', opacity: OPACITY_EXISTS }; }
+  if (included && isSelected) { return { status: 'Will import', opacity: OPACITY_WILL_IMPORT }; }
+  if (included) { return { status: 'Skipped', opacity: OPACITY_SKIPPED }; }
+  return { status: 'Excluded', opacity: OPACITY_EXCLUDED };
+}
+
 interface VersionValue {
   name: string;
   releaseDate: string | null;
@@ -18,6 +30,41 @@ interface Props {
   onClose?: () => void;
   onBackToSettings?: () => void;
 }
+
+const CELL_STYLE: React.CSSProperties = {padding: '8px', textAlign: 'center', verticalAlign: 'middle'};
+
+const orDash = (value: string | null): string => value || '—';
+const tick = (flag: boolean): string => (flag ? '✓' : '');
+
+interface VersionRowProps {
+  version: VersionValue;
+  included: boolean;
+  alreadyExists: boolean;
+  isSelected: boolean;
+  onToggle: (name: string) => void;
+}
+
+const VersionRow: React.FC<VersionRowProps> = ({version: v, included, alreadyExists, isSelected, onToggle}) => {
+  const { status, opacity } = getRowStatus(alreadyExists, included, isSelected);
+  return (
+    <tr style={{borderBottom: '1px solid #f0f0f0', opacity}}>
+      <td style={{padding: '0 8px', width: '32px', textAlign: 'center', verticalAlign: 'middle'}}>
+        {included && !alreadyExists ? (
+          <Checkbox
+            checked={isSelected}
+            onChange={() => onToggle(v.name)}
+          />
+        ) : null}
+      </td>
+      <td style={CELL_STYLE}>{v.name}</td>
+      <td style={CELL_STYLE}>{orDash(v.releaseDate)}</td>
+      <td style={CELL_STYLE}>{orDash(v.startDate)}</td>
+      <td style={CELL_STYLE}>{tick(v.isReleased)}</td>
+      <td style={CELL_STYLE}>{tick(v.isArchived)}</td>
+      <td style={{...CELL_STYLE, width: '120px', whiteSpace: 'nowrap', color: alreadyExists ? '#2196F3' : undefined}}>{status}</td>
+    </tr>
+  );
+};
 
 // eslint-disable-next-line complexity
 export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSettings}) => {
@@ -237,41 +284,16 @@ export const ImportVersions: React.FC<Props> = ({fieldName, onClose, onBackToSet
                   Click &quot;Fetch Versions&quot; to load available versions
                 </td>
               </tr>
-            ) : versions.map(v => {
-              const included = filteredVersions.some(fv => fv.name === v.name);
-              const alreadyExists = existingVersionNames.has(v.name);
-              const isImportable = included && !alreadyExists;
-              const isSelected = selectedForImport.has(v.name);
-              const OPACITY_EXISTS = 0.6;
-              const OPACITY_WILL_IMPORT = 1;
-              const OPACITY_SKIPPED = 0.7;
-              const OPACITY_EXCLUDED = 0.4;
-              const getStatusAndOpacity = () => {
-                if (alreadyExists) { return { status: 'Already exists', opacity: OPACITY_EXISTS }; }
-                if (included && isSelected) { return { status: 'Will import', opacity: OPACITY_WILL_IMPORT }; }
-                if (included) { return { status: 'Skipped', opacity: OPACITY_SKIPPED }; }
-                return { status: 'Excluded', opacity: OPACITY_EXCLUDED };
-              };
-              const { status, opacity } = getStatusAndOpacity();
-              return (
-                <tr key={v.name} style={{borderBottom: '1px solid #f0f0f0', opacity}}>
-                  <td style={{padding: '0 8px', width: '32px', textAlign: 'center', verticalAlign: 'middle'}}>
-                    {isImportable ? (
-                      <Checkbox
-                        checked={isSelected}
-                        onChange={() => toggleVersionSelection(v.name)}
-                      />
-                    ) : null}
-                  </td>
-                  <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.name}</td>
-                  <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.releaseDate || '—'}</td>
-                  <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.startDate || '—'}</td>
-                  <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.isReleased ? '✓' : ''}</td>
-                  <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle'}}>{v.isArchived ? '✓' : ''}</td>
-                  <td style={{padding: '8px', textAlign: 'center', verticalAlign: 'middle', width: '120px', whiteSpace: 'nowrap', color: alreadyExists ? '#2196F3' : undefined}}>{status}</td>
-                </tr>
-              );
-            })}
+            ) : versions.map(v => (
+              <VersionRow
+                key={v.name}
+                version={v}
+                included={filteredVersions.some(fv => fv.name === v.name)}
+                alreadyExists={existingVersionNames.has(v.name)}
+                isSelected={selectedForImport.has(v.name)}
+                onToggle={toggleVersionSelection}
+              />
+            ))}
           </tbody>
         </table>
       </div>
