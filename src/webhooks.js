@@ -102,6 +102,12 @@ const IPV4_PARTS = 4;
 const MAX_OCTET = 255;
 const MAX_PORT = 65535;
 const HOST_AND_PORT = 2;
+// Single-label hosts are rejected separately. The DNS services after home.arpa resolve a name to loopback
+// or to the IP address in the name.
+// ponytail: a suffix list is not a full SSRF control (any public name can resolve to a private address, and
+// the scripting API has no DNS lookup); an admin allowlist of receiver domains is the upgrade
+const INTERNAL_HOST_SUFFIX = new RegExp('(^|\\.)(localhost|local|internal|lan|localdomain|home\\.arpa|' +
+    'nip\\.io|sslip\\.io|xip\\.io|localtest\\.me|lvh\\.me|vcap\\.me|traefik\\.me|localhost\\.direct|1u\\.ms)$');
 
 /**
  * Checks that a webhook URL is safe to send release data and the secret to.
@@ -124,7 +130,7 @@ function validateWebhookUrl(url) {
     const host = parts[0].toLowerCase().replace(/\.$/, '');
     const labels = host.split('.');
     if (!host || labels.some(function (l) { return !/^[a-z0-9-]+$/.test(l); })) { return 'URL has an incorrect host name'; }
-    if (host === 'localhost' || /\.localhost$/.test(host)) { return 'Local addresses are not allowed'; }
+    if (labels.length < HOST_AND_PORT || INTERNAL_HOST_SUFFIX.test(host)) { return 'Local and internal host names are not allowed'; }
     // Numeric hosts: only the plain dotted-quad form is parsed, so decimal, octal, and hex forms of 127.0.0.1 are rejected.
     // ponytail: a host name that resolves to a private address is not detected; the scripting API has no DNS lookup
     if (labels.every(function (l) { return /^(\d+|0x[0-9a-f]*)$/.test(l); })) {
@@ -179,7 +185,13 @@ function mergeWebhooks(incoming, stored) {
         const events = Array.isArray(h.events) ? h.events : [];
         const unknown = events.filter(function (e) { return !EVENT_TYPES[e]; });
         if (unknown.length > 0) { return {error: 'Unknown events: ' + unknown.join(', ')}; }
-        const secret = (typeof h.secret === 'string' && h.secret) ? h.secret : (prev && prev.secret) || '';
+        const newSecret = (typeof h.secret === 'string' && h.secret) ? h.secret : '';
+        // The stored secret is kept only for the same URL. Shared receiver hosts tell users apart by the path,
+        // so a changed path can also send the secret to another person
+        if (!newSecret && prev && prev.secret && prev.url !== h.url) {
+            return {error: (name || 'Webhook ' + (i + 1)) + ': enter the secret again when you change the URL'};
+        }
+        const secret = newSecret || (prev && prev.secret) || '';
         if (secret.length < MIN_SECRET_LENGTH || secret.length > MAX_SECRET_LENGTH) {
             return {error: (name || 'Webhook ' + (i + 1)) + ': the secret must have ' + MIN_SECRET_LENGTH + ' to ' + MAX_SECRET_LENGTH + ' characters'};
         }

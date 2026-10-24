@@ -70,6 +70,18 @@ describe('mergeWebhooks', () => {
     expect(webhooks.mergeWebhooks([{...HOOK, id: undefined, secret: 'short'}], []).error).toMatch(/secret/);
   });
 
+  it('keeps the stored secret only while the URL stays the same', () => {
+    const {webhooks} = setup();
+    const stored = [{...HOOK}];
+    const sameUrl = webhooks.mergeWebhooks([{...HOOK, name: 'Renamed', secret: ''}], stored);
+    expect(sameUrl.webhooks[0].secret).toBe(SECRET);
+    for (const url of ['https://attacker.example.net/hook', 'https://ci.example.com:8443/hook', 'https://ci.example.com/other-user']) {
+      expect(webhooks.mergeWebhooks([{...HOOK, url, secret: ''}], stored).error).toMatch(/enter the secret again/);
+    }
+    const newSecret = webhooks.mergeWebhooks([{...HOOK, url: 'https://attacker.example.net/hook', secret: 'n'.repeat(40)}], stored);
+    expect(newSecret.webhooks[0].secret).toBe('n'.repeat(40));
+  });
+
   it('gives a new webhook an id', () => {
     const {webhooks} = setup();
     const {webhooks: merged} = webhooks.mergeWebhooks([{...HOOK, id: undefined}], []);
@@ -137,7 +149,8 @@ describe('validateWebhookUrl', () => {
   it.each([
     'https://hooks.example.com/webhook/abc',
     'https://ci.example.com:8443/hook?x=1',
-    'https://172.15.0.1/hook'
+    'https://172.15.0.1/hook',
+    'https://locallab.example.com/hook'
   ])('accepts %s', (url) => {
     const {webhooks} = setup();
     expect(webhooks.validateWebhookUrl(url)).toBeNull();
@@ -162,7 +175,19 @@ describe('validateWebhookUrl', () => {
     'https://100.64.0.1/hook',
     'https://2130706433/hook',
     'https://0x7f.0.0.1/hook',
-    'https://0177.0.0.1/hook'
+    'https://0177.0.0.1/hook',
+    'https://intranet/hook',
+    'https://ci.internal/hook',
+    'https://printer.local/hook',
+    'https://nas.home.arpa/hook',
+    'https://10.0.0.1.nip.io/hook',
+    'https://app.10.0.0.1.sslip.io/hook',
+    'https://lvh.me/hook',
+    'https://app.vcap.me/hook',
+    'https://x.traefik.me/hook',
+    'https://10.0.0.1.xip.io/hook',
+    'https://a.localhost.direct/hook',
+    'https://make-127-0-0-1-rr.1u.ms/hook'
   ])('rejects %s', (url) => {
     const {webhooks} = setup();
     expect(webhooks.validateWebhookUrl(url)).toEqual(expect.any(String));
