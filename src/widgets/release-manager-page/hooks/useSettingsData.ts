@@ -8,6 +8,8 @@ interface UseSettingsDataReturn {
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
   isLoading: boolean;
   error: string | null;
+  /** Settings as loaded, to tell whether the form has unsaved changes */
+  loadedSettings: AppSettings | null;
 }
 
 /**
@@ -21,6 +23,7 @@ export function useSettingsData(api: API): UseSettingsDataReturn {
     yellowZoneValues: [],
     redZoneValues: []
   });
+  const [loadedSettings, setLoadedSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +40,9 @@ export function useSettingsData(api: API): UseSettingsDataReturn {
           color: p.color || generateColorFromString(p.name)
         }));
         
-        setSettings({ ...response, products: withDetectedProductColors });
+        const loaded = { ...response, products: withDetectedProductColors };
+        setSettings(loaded);
+        setLoadedSettings(loaded);
       } catch {
         setError('Failed to load progress settings');
       } finally {
@@ -53,6 +58,6 @@ export function useSettingsData(api: API): UseSettingsDataReturn {
     return () => { window.removeEventListener('settings-updated', handleSettingsUpdated); };
   }, [api]);
 
-  return { settings, setSettings, isLoading, error };
+  return { settings, setSettings, isLoading, error, loadedSettings };
 }
 
