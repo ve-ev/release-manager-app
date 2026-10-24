@@ -16,6 +16,7 @@ A [YouTrack](https://www.jetbrains.com/youtrack/) app for planning, tracking, an
 - **Release Notes** — Generate Markdown release notes from release data and planned issues
 - **Filters & Sorting** — Filter by tag, version, or status; sort by any column
 - **Audit Log** — Track key changes to release versions (status transitions, freeze events, issue changes)
+- **Outbound Webhooks** — Send release events (status changes, feature freeze, release, content changes) as [CloudEvents](https://cloudevents.io/) to CI/CD pipelines, chat relays, or other tools, with a test event and a delivery log
 - **Permissions** — Role-based access: full managers, light managers (edit-only), and viewers
 - **Release Calendar** — Dashboard widget that visualizes feature-freeze and release dates across multiple projects in month, quarter, or year views
 - **Guided Onboarding** — Interactive step-by-step setup on first launch: configure settings before creating your first release
@@ -118,6 +119,7 @@ The app follows a three-layer architecture running inside the YouTrack platform:
 - **Custom Field Mapping** — bidirectional sync: the workflow updates releases when an issue's custom field changes; the backend updates the issue's custom field when it is added/removed from a release.
 - **Permissions** — three roles: Manager (full access), Light Manager (edit-only), Viewer (read-only), resolved via the YouTrack permissions API.
 - **Release Calendar** — a separate `DASHBOARD_WIDGET` that reads release data from one or more projects via the backend and renders feature-freeze and release-date markers on a shared timeline. Configuration (project selection, display options) is stored in the widget's own settings schema and activated through YouTrack's native `onConfigure` callback.
+- **Outbound Webhooks** — `saveReleaseVersions` finds the release events of each save and puts them in an outbox (`webhookOutbox`) in the same transaction. After the commit, an async function sends them as CloudEvents 1.0 with a Bearer token, retries failed deliveries, and records each attempt in `webhookDeliveries`. Webhooks and their secrets are stored in the `webhooks` project property; the widget never gets a secret.
 - **Guided Onboarding** — the empty-state view presents two sequential steps (configure settings → create first release). Step 2 is locked until the app is configured, preventing accidental release creation without a field mapping.
 
 ### Data Flow
@@ -127,6 +129,7 @@ The app follows a three-layer architecture running inside the YouTrack platform:
 3. The **backend** validates, updates project extension properties (JSON storage), and optionally sets custom fields on issues
 4. The **workflow** listens for issue custom field changes and calls the backend to keep releases in sync
 5. Hooks re-fetch data and React re-renders the UI
+6. If **Outbound Webhooks** is on, the backend sends the release events of the save to the configured webhooks after the transaction commits
 
 ## Development
 
