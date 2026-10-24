@@ -193,3 +193,13 @@ describe('webhooks validation errors', () => {
     expect(body).toMatchObject({webhookIndex: 1, error: expect.stringMatching(/secret/)});
   });
 });
+
+describe('webhook events offered to the widget', () => {
+  it('GET hides the auto-attach events when Auto-attach by Filter is off', () => {
+    // call() runs with customFieldsMapping on, so auto-attach is off
+    const {body} = call('GET', 'webhooks', 'rm');
+    const events = (body as { events: string[] }).events;
+    expect(events).toContain('STATUS_CHANGED');
+    expect(events.filter(e => e.startsWith('AUTO_'))).toEqual([]);
+  });
+});
