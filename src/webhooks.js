@@ -312,24 +312,24 @@ function collectEvents(storedReleases, nextReleases, now) {
  * @returns {Object} CloudEvents 1.0 event in structured mode
  */
 function toCloudEvent(item, project, user) {
-    const rv = item.release || {};
+    const rv = item.release;
     let details = null;
     if (item.audit) {
         details = Object.assign({}, item.audit);
         ['type', 'at', 'by', 'releaseId', 'releaseVersion'].forEach(function (k) { delete details[k]; });
     }
-    return {
+    const event = {
         specversion: '1.0',
         id: uuid(),
         source: '/projects/' + project.shortName + '/release-manager',
         type: TYPE_PREFIX + (EVENT_TYPES[item.event] || TEST_TYPE),
-        subject: String(rv.version || rv.id || ''),
         time: item.at,
         datacontenttype: 'application/json',
         data: {
             event: item.event,
             project: {shortName: project.shortName, name: project.name},
-            release: {
+            // A test event is not about a release
+            release: rv ? {
                 id: rv.id,
                 version: rv.version,
                 product: rv.product,
@@ -338,11 +338,15 @@ function toCloudEvent(item, project, user) {
                 featureFreezeDate: rv.featureFreezeDate || null,
                 releaseDate: rv.releaseDate || null,
                 plannedIssues: (rv.plannedIssues || []).map(function (it) { return it && it.id; }).filter(Boolean)
-            },
+            } : null,
             actor: user ? {login: user.login, fullName: user.fullName} : null,
             details: details
         }
     };
+    // CloudEvents: subject is optional, but when present it must be a non-empty string
+    const subject = rv ? String(rv.version || rv.id || '') : '';
+    if (subject) { event.subject = subject; }
+    return event;
 }
 
 function scheduleDelivery(ctx, project, delayMs) {
@@ -439,7 +443,7 @@ function sendTest(ctx, input) {
     if (urlError) { return {error: urlError}; }
     const resolved = resolveSecret(input, prev);
     if (resolved.error) { return {error: resolved.error}; }
-    const event = toCloudEvent({event: 'TEST', release: {}, prevStatus: null, audit: null, at: new Date().toISOString()},
+    const event = toCloudEvent({event: 'TEST', release: null, prevStatus: null, audit: null, at: new Date().toISOString()},
         ctx.project, ctx.currentUser);
     const delivery = send({url: input.url, secret: resolved.secret}, event);
     const recorded = !!prev && prev.url === input.url;
