@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const entities = require('@jetbrains/youtrack-scripting-api/entities');
 const api = require('./backend.js');
+const webhooks = require('./webhooks.js');
 const {message} = require("@jetbrains/youtrack-scripting-api/workflow.js");
 
 /**
@@ -111,5 +112,6 @@ exports.rule = entities.Issue.onChange({
             console.log('Failed to update releases on custom field change: ' + (e && e.message ? e.message : e));
         }
     },
+    asyncFunctions: webhooks.asyncFunctions,
     requirements: {}
 });

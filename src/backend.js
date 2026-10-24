@@ -12,6 +12,8 @@
 const entities = require('@jetbrains/youtrack-scripting-api/entities');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const search = require('@jetbrains/youtrack-scripting-api/search');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const webhooks = require('./webhooks.js');
 
 /**
  * HTTP status codes used throughout the application
@@ -181,8 +183,10 @@ function saveReleaseVersions(ctx, releaseVersions) {
             // ponytail: keeps the newest events only; keep milestone events (freeze, status) too if old ones are needed
             rv.auditEvents = rv.auditEvents.slice(-MAX_AUDIT_EVENTS_PER_RELEASE);
         });
+        const storedReleases = getReleaseVersions(ctx);
         updateRevisions(ctx, releaseVersions);
         ctx.project.extensionProperties.releases = JSON.stringify(releaseVersions);
+        webhooks.enqueue(ctx, storedReleases, releaseVersions);
         return true;
     } catch (error) {
         logError('Error saving release versions', error);
@@ -1459,6 +1463,7 @@ exports.httpHandler = {
                         metaIssuesEnabled: settings.metaIssuesEnabled || false,
                         customFieldsMapping: settings.customFieldsMapping || false,
                         autoAttachByFilter: settings.autoAttachByFilter || false,
+                        outboundWebhooks: settings.outboundWebhooks || false,
                     });
                 } catch (error) {
                     logError('Failed to get ff', error);
@@ -1568,6 +1573,81 @@ exports.httpHandler = {
                     logError('Failed to update settings', error);
                     sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
                 }
+            }
+        },
+        /**
+         * GET /webhooks - Outbound webhooks of the project. Secrets are never returned.
+         */
+        {
+            method: 'GET',
+            path: 'webhooks',
+            scope: 'project',
+            handle: function handle(ctx) {
+                if (!isReleaseManager(ctx)) {
+                    sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can view webhooks');
+                    return;
+                }
+                ctx.response.json({
+                    events: Object.keys(webhooks.EVENT_TYPES),
+                    maxWebhooks: webhooks.MAX_WEBHOOKS,
+                    webhooks: webhooks.readWebhooks(ctx.project).map(webhooks.maskWebhook)
+                });
+            }
+        },
+        /**
+         * PUT /webhooks - Replace the webhooks of the project. An empty secret keeps the stored secret.
+         */
+        {
+            method: 'PUT',
+            path: 'webhooks',
+            scope: 'project',
+            handle: function handle(ctx) {
+                if (!isReleaseManager(ctx)) {
+                    sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can change webhooks');
+                    return;
+                }
+                if (!ctx.settings.outboundWebhooks) {
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'The Outbound Webhooks feature is disabled');
+                    return;
+                }
+                try {
+                    const body = ctx.request.json() || {};
+                    const result = webhooks.mergeWebhooks(body.webhooks, webhooks.readWebhooks(ctx.project));
+                    if (result.error) {
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, result.error);
+                        return;
+                    }
+                    webhooks.writeWebhooks(ctx.project, result.webhooks);
+                    ctx.response.json({webhooks: result.webhooks.map(webhooks.maskWebhook)});
+                } catch (error) {
+                    logError('Failed to update webhooks', error);
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, error.message || error);
+                }
+            }
+        },
+        /**
+         * POST /webhooks-test - Send a test event to one saved webhook and return the result
+         */
+        {
+            method: 'POST',
+            path: 'webhooks-test',
+            scope: 'project',
+            handle: function handle(ctx) {
+                if (!isReleaseManager(ctx)) {
+                    sendErrorResponse(ctx, HTTP_STATUS.FORBIDDEN, 'Only release managers can test webhooks');
+                    return;
+                }
+                if (!ctx.settings.outboundWebhooks) {
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'The Outbound Webhooks feature is disabled');
+                    return;
+                }
+                const body = ctx.request.json() || {};
+                const hook = webhooks.readWebhooks(ctx.project).find(function (h) { return h.id === body.id; });
+                if (!hook) {
+                    sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Webhook not found. Save the webhook before you test it.');
+                    return;
+                }
+                ctx.response.json(webhooks.sendTest(ctx, hook));
             }
         },
         /**
@@ -2432,7 +2512,9 @@ exports.httpHandler = {
                 }
             }
         }
-    ]
+    ],
+    // saveReleaseVersions schedules webhook delivery by name, so every entry point that saves must declare it
+    asyncFunctions: webhooks.asyncFunctions
 };
 
 // Expose selected helpers for workflows and other modules

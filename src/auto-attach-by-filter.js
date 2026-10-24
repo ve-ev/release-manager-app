@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const entities = require('@jetbrains/youtrack-scripting-api/entities');
 const api = require('./backend.js');
+const webhooks = require('./webhooks.js');
 
 // Debounce window: quick changes to one issue merge into one search
 const AUTO_ATTACH_DELAY_MS = 5000;
@@ -23,10 +24,10 @@ exports.rule = entities.Issue.onChange({
         ctx.store('user', ctx.currentUser);
         ctx.invokeAsync('autoAttach', AUTO_ATTACH_DELAY_MS, 'auto-attach-' + ctx.issue.id);
     },
-    asyncFunctions: {
+    asyncFunctions: Object.assign({
         autoAttach: (ctx) => {
             api.autoAttachIssue(ctx, ctx.load('issue'), ctx.load('user'));
         }
-    },
+    }, webhooks.asyncFunctions),
     requirements: {}
 });
