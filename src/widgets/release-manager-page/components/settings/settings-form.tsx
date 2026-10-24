@@ -32,7 +32,7 @@ interface AppSettingsFormProps {
 // eslint-disable-next-line complexity
 export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose, onOpenImport }) => {
   // Use custom hook to fetch and manage settings data
-  const { settings, setSettings, isLoading, error: loadError } = useSettingsData(api);
+  const { settings, setSettings, isLoading, error: loadError, loadedSettings } = useSettingsData(api);
   // Load app-level config to conditionally render sections
   const appConfig = useAppConfig(api);
 
@@ -53,6 +53,10 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose, onOpenIm
   const [newProductName, setNewProductName] = useState<string>('');
   const [editProductId, setEditProductId] = useState<string | null>(null);
   const [editProductName, setEditProductName] = useState<string>('');
+
+  // Close when there is nothing to lose; Cancel when unsaved changes are dropped (same as the Webhooks tab)
+  const isDirty = !!loadedSettings && (JSON.stringify(settings) !== JSON.stringify(loadedSettings) ||
+    !!newProductName.trim() || editProductId !== null);
 
   // Add new product locally (no POST until Save)
   const handleAddProduct = useCallback(() => {
@@ -238,7 +242,7 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose, onOpenIm
               <div className="settings-separator horizontal" role="separator" aria-orientation="horizontal"/>
 
               <div className="settings-actions">
-                <Button onClick={onClose}>Cancel</Button>
+                <Button onClick={onClose}>{isDirty ? 'Cancel' : 'Close'}</Button>
                 <Button primary onClick={handleSave} disabled={isSaving}>
                   {isSaving ? 'Saving...' : 'Save'}
                 </Button>
