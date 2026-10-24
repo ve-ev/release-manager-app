@@ -221,3 +221,43 @@ describe('sendTest', () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe('delivery log', () => {
+  it('records each attempt, newest first, without the secret', () => {
+    const {webhooks, newCtx, project} = setup(() => ({code: 500, isSuccess: false}));
+    webhooks.enqueue(newCtx(), before, after);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      webhooks.deliverWebhooks(newCtx());
+      const pending = JSON.parse(project.extensionProperties.webhookOutbox || '[]').map((e: object) => ({...e, notBefore: 0}));
+      project.extensionProperties.webhookOutbox = pending.length ? JSON.stringify(pending) : null;
+    }
+    const entries = webhooks.readDeliveryLog(project);
+    expect(entries.map((e: { attempt: number }) => e.attempt)).toEqual([3, 2, 1]);
+    expect(entries[0]).toMatchObject({hookId: HOOK.id, event: 'STATUS_CHANGED', subject: '2.4.0', host: 'ci.example.com', code: 500, error: 'HTTP 500'});
+    expect(new Set(entries.map((e: { id: string }) => e.id)).size).toBe(1);
+    expect(project.extensionProperties.webhookDeliveries).not.toContain(SECRET);
+  });
+
+  it('keeps the newest 100 entries', () => {
+    const {webhooks, newCtx, project} = setup();
+    for (let i = 0; i < 105; i++) {
+      webhooks.sendTest(newCtx(), {id: HOOK.id, url: HOOK.url, secret: ''});
+    }
+    expect(webhooks.readDeliveryLog(project)).toHaveLength(100);
+  });
+
+  it('records a test of a saved webhook, not of an unsaved one', () => {
+    const {webhooks, newCtx, project} = setup();
+    webhooks.sendTest(newCtx(), {url: 'https://new.example.com/hook', secret: 'o'.repeat(40)});
+    expect(webhooks.readDeliveryLog(project)).toEqual([]);
+    webhooks.sendTest(newCtx(), {id: HOOK.id, url: HOOK.url, secret: ''});
+    expect(webhooks.readDeliveryLog(project)).toMatchObject([{event: 'TEST', attempt: 1, code: 200}]);
+  });
+
+  it('hides the entries of deleted webhooks', () => {
+    const {webhooks, newCtx, project} = setup();
+    webhooks.sendTest(newCtx(), {id: HOOK.id, url: HOOK.url, secret: ''});
+    project.extensionProperties.webhooks = '[]';
+    expect(webhooks.readDeliveryLog(project)).toEqual([]);
+  });
+});

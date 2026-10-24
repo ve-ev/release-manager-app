@@ -1593,7 +1593,8 @@ exports.httpHandler = {
                         return isAutoAttachEnabled(ctx) || e.indexOf('AUTO_') !== 0;
                     }),
                     maxWebhooks: webhooks.MAX_WEBHOOKS,
-                    webhooks: webhooks.readWebhooks(ctx.project).map(webhooks.maskWebhook)
+                    webhooks: webhooks.readWebhooks(ctx.project).map(webhooks.maskWebhook),
+                    deliveries: webhooks.readDeliveryLog(ctx.project)
                 });
             }
         },

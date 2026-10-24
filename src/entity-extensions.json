@@ -26,6 +26,9 @@
         },
         "webhookOutbox": {
           "type": "string"
+        },
+        "webhookDeliveries": {
+          "type": "string"
         }
       }
     },

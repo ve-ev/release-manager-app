@@ -476,3 +476,51 @@
 .webhook-delivery-details.failed {
   color: var(--ring-error-color);
 }
+
+/* Delivery log in a webhook card */
+.webhook-log {
+  margin-top: 8px;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--ring-line-color);
+  border-radius: 4px;
+}
+
+.webhook-log table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.webhook-log th {
+  position: sticky;
+  top: 0;
+  text-align: left;
+  font-weight: 600;
+  color: var(--ring-secondary-color);
+  background: var(--ring-content-background-color);
+}
+
+.webhook-log th,
+.webhook-log td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--ring-line-color);
+  vertical-align: top;
+}
+
+.webhook-log tr:last-child td {
+  border-bottom: 0;
+}
+
+.webhook-log td:first-child {
+  white-space: nowrap;
+}
+
+.webhook-log td.ok {
+  color: var(--ring-success-color);
+}
+
+.webhook-log td.failed {
+  color: var(--ring-error-color);
+  overflow-wrap: anywhere;
+}
