@@ -1614,7 +1614,10 @@ exports.httpHandler = {
                     const body = ctx.request.json() || {};
                     const result = webhooks.mergeWebhooks(body.webhooks, webhooks.readWebhooks(ctx.project));
                     if (result.error) {
-                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, result.error);
+                        // webhookIndex lets the widget show the error in the card of that webhook
+                        sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, typeof result.index === 'number'
+                            ? {error: result.error, webhookIndex: result.index}
+                            : result.error);
                         return;
                     }
                     webhooks.writeWebhooks(ctx.project, result.webhooks);

@@ -184,3 +184,12 @@ describe('webhooks endpoints', () => {
     expect(project.extensionProperties.webhooks).toBe(stored);
   });
 });
+
+describe('webhooks validation errors', () => {
+  it('PUT tells which webhook has the error', () => {
+    const ok = {url: 'https://ci.example.com/hook', secret: 's'.repeat(40), events: []};
+    const {code, body} = call('PUT', 'webhooks', 'rm', {webhooks: [ok, {...ok, secret: 'short'}]});
+    expect(code).toBe(400);
+    expect(body).toMatchObject({webhookIndex: 1, error: expect.stringMatching(/secret/)});
+  });
+});

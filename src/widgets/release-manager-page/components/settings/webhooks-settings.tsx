@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import Button from '@jetbrains/ring-ui-built/components/button/button';
-import Input from '@jetbrains/ring-ui-built/components/input/input';
+import Input, {Size} from '@jetbrains/ring-ui-built/components/input/input';
 import Checkbox from '@jetbrains/ring-ui-built/components/checkbox/checkbox';
 import LoaderInline from '@jetbrains/ring-ui-built/components/loader-inline/loader-inline';
 import Confirm from '@jetbrains/ring-ui-built/components/confirm/confirm';
@@ -73,6 +73,8 @@ const DeliveryStatus: React.FC<{ delivery: WebhookDelivery | null }> = ({deliver
   );
 };
 
+const cardErrorId = (key: string) => `webhook-error-${key}`;
+
 interface CardProps {
   draft: Draft;
   index: number;
@@ -80,20 +82,24 @@ interface CardProps {
   allowedEvents: string[];
   secretVisible: boolean;
   urlError: string;
+  secretError: string;
   isTesting: boolean;
   canTest: boolean;
+  /** Save error of this webhook, from the backend */
+  error: string;
   onToggle: () => void;
   onChange: (patch: Partial<Draft>) => void;
   onToggleSecret: () => void;
   onUrlBlur: (url: string) => void;
+  onSecretBlur: (secret: string) => void;
   onTest: () => void;
   onDelete: () => void;
 }
 
 // eslint-disable-next-line complexity
 const WebhookCard: React.FC<CardProps> = ({
-  draft: d, index, isOpen, allowedEvents, secretVisible, urlError, isTesting, canTest,
-  onToggle, onChange, onToggleSecret, onUrlBlur, onTest, onDelete
+  draft: d, index, isOpen, allowedEvents, secretVisible, urlError, secretError, isTesting, canTest, error,
+  onToggle, onChange, onToggleSecret, onUrlBlur, onSecretBlur, onTest, onDelete
 }) => {
   const bodyId = `webhook-body-${d.key}`;
   const title = d.name || hostOf(d.url) || `Webhook ${index + 1}`;
@@ -110,47 +116,57 @@ const WebhookCard: React.FC<CardProps> = ({
         >
           <span className="webhook-card-title">{title}</span>
         </Button>
+        {error && !isOpen && <span className="webhook-status failed">Not saved: error</span>}
         {!d.enabled && <span className="webhook-status">Disabled</span>}
         <DeliveryStatus delivery={d.lastDelivery}/>
       </div>
 
       {isOpen && (
         <div className="webhook-card-body" id={bodyId}>
+          {error && (
+            <div className="webhooks-error" role="alert" tabIndex={-1} id={cardErrorId(d.key)}>{error}</div>
+          )}
           {d.lastDelivery && (
             <div className={`webhook-delivery-details${d.lastDelivery.error ? ' failed' : ''}`}>
               Last delivery: {new Date(d.lastDelivery.at).toLocaleString()}
               {d.lastDelivery.error ? ` — ${d.lastDelivery.error}` : `, HTTP ${d.lastDelivery.code}`}
             </div>
           )}
-          <Input
-            label="Name"
-            value={d.name}
-            maxLength={100}
-            onChange={e => onChange({name: e.target.value})}
-            placeholder="For example, CI pipeline"
-          />
-          <Input
-            label="URL"
-            type="url"
-            value={d.url}
-            error={urlError || null}
-            onChange={e => onChange({url: e.target.value})}
-            onBlur={e => onUrlBlur(e.target.value)}
-            placeholder="https://"
-          />
-          <div className="webhook-secret">
+          <div className="webhook-fields">
+            <Input
+              label="Name"
+              size={Size.FULL}
+              value={d.name}
+              maxLength={100}
+              onChange={e => onChange({name: e.target.value})}
+              placeholder="For example, CI pipeline"
+            />
+            <Input
+              label="URL"
+              size={Size.FULL}
+              type="url"
+              value={d.url}
+              error={urlError || null}
+              onChange={e => onChange({url: e.target.value})}
+              onBlur={e => onUrlBlur(e.target.value)}
+              placeholder="https://"
+            />
             <Input
               label="Secret"
+              size={Size.FULL}
+              className="webhook-secret-input"
               type={secretVisible ? 'text' : 'password'}
               autoComplete="new-password"
               value={d.secret}
+              error={secretError || null}
               onChange={e => onChange({secret: e.target.value})}
+              onBlur={e => onSecretBlur(e.target.value)}
               placeholder={d.hasSecret ? 'Saved. Type a new value to replace it.' : `At least ${MIN_SECRET_LENGTH} characters`}
               help="Sent as “Authorization: Bearer <secret>”. You cannot see a saved secret again. When you change the URL, enter the secret again."
+              afterInput={d.secret ? (
+                <Button inline className="webhook-secret-toggle" onClick={onToggleSecret}>{secretVisible ? 'Hide' : 'Show'}</Button>
+            ) : null}
             />
-            {d.secret && (
-              <Button inline onClick={onToggleSecret}>{secretVisible ? 'Hide' : 'Show'}</Button>
-            )}
           </div>
 
           <fieldset className="webhook-events">
@@ -185,8 +201,8 @@ const WebhookCard: React.FC<CardProps> = ({
             <Button onClick={onTest} disabled={!canTest}>Send test event</Button>
             <Button danger onClick={onDelete}>Delete</Button>
           </div>
-          {!d.id && <div className="field-help">Save the webhook before you send a test event.</div>}
-          {d.id && !canTest && !isTesting && <div className="field-help">Save the changes before you send a test event.</div>}
+          {!d.id && <div className="field-help webhook-test-hint">Save the webhook before you send a test event.</div>}
+          {d.id && !canTest && !isTesting && <div className="field-help webhook-test-hint">Save the changes before you send a test event.</div>}
         </div>
       )}
     </section>
@@ -210,10 +226,12 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
   const [status, setStatus] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showSecret, setShowSecret] = useState<Set<string>>(new Set());
   const [urlErrors, setUrlErrors] = useState<Record<string, string>>({});
+  const [secretErrors, setSecretErrors] = useState<Record<string, string>>({});
   const [testingKey, setTestingKey] = useState<string | null>(null);
   const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
@@ -248,6 +266,7 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     setError(null);
+    setCardErrors({});
     setStatus('');
     try {
       const result = await api.saveWebhooks(drafts.map(toInput));
@@ -258,8 +277,18 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
       setDrafts(result.map(toDraft));
       setStatus('Webhooks saved');
     } catch (e) {
-      setError(getBackendErrorMessage(e, 'Failed to save webhooks'));
-      requestAnimationFrame(() => errorRef.current?.focus());
+      const message = getBackendErrorMessage(e, 'Failed to save webhooks');
+      const index = (e as { data?: { webhookIndex?: unknown } } | null)?.data?.webhookIndex;
+      const failed = typeof index === 'number' ? drafts[index] : undefined;
+      if (failed) {
+        // Show the error in the card of that webhook and open the card
+        setCardErrors({[failed.key]: message});
+        setExpanded(prev => new Set(prev).add(failed.key));
+        requestAnimationFrame(() => document.getElementById(cardErrorId(failed.key))?.focus());
+      } else {
+        setError(message);
+        requestAnimationFrame(() => errorRef.current?.focus());
+      }
     } finally {
       setIsSaving(false);
     }
@@ -285,6 +314,17 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
 
   const validateUrl = (key: string, url: string) => {
     setUrlErrors(prev => ({...prev, [key]: url && !/^https:\/\//i.test(url) ? 'Use an HTTPS URL' : ''}));
+  };
+
+  // Same rule as the backend; the backend error stays the final check
+  const validateSecret = (draft: Draft, secret: string) => {
+    let message = '';
+    if (secret && secret.length < MIN_SECRET_LENGTH) {
+      message = `Enter at least ${MIN_SECRET_LENGTH} characters`;
+    } else if (!secret && !draft.hasSecret) {
+      message = 'A secret is required';
+    }
+    setSecretErrors(prev => ({...prev, [draft.key]: message}));
   };
 
   if (isLoading) {
@@ -323,12 +363,15 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
               allowedEvents={allowedEvents}
               secretVisible={showSecret.has(d.key)}
               urlError={urlErrors[d.key] || ''}
+              secretError={secretErrors[d.key] || ''}
               isTesting={testingKey === d.key}
               canTest={!!d.id && !isDirty && testingKey === null}
+              error={cardErrors[d.key] || ''}
               onToggle={() => setExpanded(prev => toggleIn(prev, d.key))}
               onChange={patch => update(d.key, patch)}
               onToggleSecret={() => setShowSecret(prev => toggleIn(prev, d.key))}
               onUrlBlur={url => validateUrl(d.key, url)}
+              onSecretBlur={secret => validateSecret(d, secret)}
               onTest={() => handleTest(d)}
               onDelete={() => setConfirmDeleteKey(d.key)}
             />
@@ -338,7 +381,7 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
 
       <div className="webhooks-add">
         <Button onClick={handleAdd} disabled={drafts.length >= maxWebhooks}>Add webhook</Button>
-        <span className="field-help">{drafts.length} of {maxWebhooks}</span>
+        <span className="webhooks-count">{drafts.length} of {maxWebhooks}</span>
       </div>
 
       <div className="webhooks-live" role="status" aria-live="polite">{status}</div>
