@@ -1588,7 +1588,10 @@ exports.httpHandler = {
                     return;
                 }
                 ctx.response.json({
-                    events: Object.keys(webhooks.EVENT_TYPES),
+                    // Auto-attach events can occur only when the feature is on, so the widget does not offer them otherwise
+                    events: Object.keys(webhooks.EVENT_TYPES).filter(function (e) {
+                        return isAutoAttachEnabled(ctx) || e.indexOf('AUTO_') !== 0;
+                    }),
                     maxWebhooks: webhooks.MAX_WEBHOOKS,
                     webhooks: webhooks.readWebhooks(ctx.project).map(webhooks.maskWebhook)
                 });
