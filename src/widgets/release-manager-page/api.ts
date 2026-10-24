@@ -392,10 +392,11 @@ export class API {
     return res.webhooks;
   }
 
-  async testWebhook(id: string): Promise<WebhookDelivery> {
-    return this.fetchJson<WebhookDelivery>('backend/webhooks-test', {
+  /** Tests the webhook as it is in the form; it does not need to be saved. `recorded` is true when lastDelivery was saved. */
+  async testWebhook(webhook: WebhookInput): Promise<{ delivery: WebhookDelivery; recorded: boolean }> {
+    return this.fetchJson<{ delivery: WebhookDelivery; recorded: boolean }>('backend/webhooks-test', {
       method: 'POST',
-      body: {id}
+      body: {id: webhook.id, url: webhook.url, secret: webhook.secret}
     });
   }
 }

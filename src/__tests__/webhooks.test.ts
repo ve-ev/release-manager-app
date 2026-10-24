@@ -193,3 +193,31 @@ describe('validateWebhookUrl', () => {
     expect(webhooks.validateWebhookUrl(url)).toEqual(expect.any(String));
   });
 });
+
+describe('sendTest', () => {
+  it('tests an unsaved webhook with the secret from the form and does not record it', () => {
+    const {webhooks, newCtx, calls, hook} = setup();
+    const other = 'o'.repeat(40);
+    const result = webhooks.sendTest(newCtx(), {url: 'https://new.example.com/hook', secret: other});
+    expect(result).toMatchObject({recorded: false, delivery: {code: 200, error: null}});
+    expect(calls[0]).toMatchObject({url: 'https://new.example.com/hook', headers: {Authorization: 'Bearer ' + other}});
+    expect(JSON.parse(calls[0].payload).type).toBe('youtrack.release-manager.webhook.test');
+    expect(hook().lastDelivery).toBeUndefined();
+  });
+
+  it('uses the stored secret for a saved webhook with the same URL and records the result', () => {
+    const {webhooks, newCtx, calls, hook} = setup();
+    const result = webhooks.sendTest(newCtx(), {id: HOOK.id, url: HOOK.url, secret: ''});
+    expect(result.recorded).toBe(true);
+    expect(calls[0].headers.Authorization).toBe('Bearer ' + SECRET);
+    expect(hook().lastDelivery).toMatchObject({code: 200});
+  });
+
+  it('does not send the stored secret to a changed URL', () => {
+    const {webhooks, newCtx, calls} = setup();
+    expect(webhooks.sendTest(newCtx(), {id: HOOK.id, url: 'https://attacker.example.net/hook', secret: ''}).error)
+      .toMatch(/Enter the secret again/);
+    expect(webhooks.sendTest(newCtx(), {url: 'http://new.example.com/hook', secret: SECRET}).error).toEqual(expect.any(String));
+    expect(calls).toHaveLength(0);
+  });
+});
