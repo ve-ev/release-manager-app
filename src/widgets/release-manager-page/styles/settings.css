@@ -311,9 +311,10 @@
 }
 
 .webhook-card-toggle {
-  flex: 1 1 auto;
   min-width: 0;
-  justify-content: flex-start;
+  max-width: 100%;
+  /* the title stays left; the statuses go to the right edge */
+  margin-right: auto;
 }
 
 /* The chevron answers the click; no motion when the user asks for less */
@@ -364,15 +365,33 @@
   overflow-wrap: anywhere;
 }
 
-.webhook-secret {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+/* Name | URL in one row, Secret below on the full width */
+.webhook-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 16px;
 }
 
-.webhook-secret > :first-child {
-  flex: 1;
-  min-width: 0;
+.webhook-secret-input {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 700px) {
+  .webhook-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Show/Hide sits in the field; the Ring input container is position: relative */
+.webhook-secret-input input {
+  padding-right: 64px;
+}
+
+.webhook-secret-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
 }
 
 .webhook-events {
@@ -380,6 +399,28 @@
   padding: 0;
   border: 0;
   min-width: 0;
+}
+
+.webhook-events legend {
+  padding: 0;
+}
+
+/* .field-help is styled only inside .settings-field above */
+.webhooks-settings .field-help {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ring-secondary-color);
+}
+
+/* Close to the Send test event button it explains */
+.webhook-test-hint {
+  margin-top: -12px;
+  text-align: right;
+}
+
+.webhooks-count {
+  font-size: 12px;
+  color: var(--ring-secondary-color);
 }
 
 .webhook-event-group {

@@ -76,7 +76,7 @@ describe('mergeWebhooks', () => {
     const sameUrl = webhooks.mergeWebhooks([{...HOOK, name: 'Renamed', secret: ''}], stored);
     expect(sameUrl.webhooks[0].secret).toBe(SECRET);
     for (const url of ['https://attacker.example.net/hook', 'https://ci.example.com:8443/hook', 'https://ci.example.com/other-user']) {
-      expect(webhooks.mergeWebhooks([{...HOOK, url, secret: ''}], stored).error).toMatch(/enter the secret again/);
+      expect(webhooks.mergeWebhooks([{...HOOK, url, secret: ''}], stored).error).toMatch(/Enter the secret again/);
     }
     const newSecret = webhooks.mergeWebhooks([{...HOOK, url: 'https://attacker.example.net/hook', secret: 'n'.repeat(40)}], stored);
     expect(newSecret.webhooks[0].secret).toBe('n'.repeat(40));

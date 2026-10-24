@@ -167,7 +167,7 @@ function isBlockedIpv4(a, b) {
  * An empty secret keeps the stored secret; lastDelivery is never taken from the request.
  * @param {Array} incoming
  * @param {Array} stored
- * @returns {{webhooks?: Array, error?: string}}
+ * @returns {{webhooks?: Array, error?: string, index?: number}} index is the webhook that has the error, if one has it
  */
 function mergeWebhooks(incoming, stored) {
     if (!Array.isArray(incoming)) { return {error: 'webhooks must be an array'}; }
@@ -179,21 +179,21 @@ function mergeWebhooks(incoming, stored) {
         const h = incoming[i] || {};
         const prev = (h.id && storedById[h.id]) || null;
         const name = typeof h.name === 'string' ? h.name.trim() : '';
-        if (name.length > MAX_NAME_LENGTH) { return {error: 'Webhook name is longer than ' + MAX_NAME_LENGTH + ' characters'}; }
+        if (name.length > MAX_NAME_LENGTH) { return {error: 'The name is longer than ' + MAX_NAME_LENGTH + ' characters', index: i}; }
         const urlError = validateWebhookUrl(h.url);
-        if (urlError) { return {error: (name || 'Webhook ' + (i + 1)) + ': ' + urlError}; }
+        if (urlError) { return {error: urlError, index: i}; }
         const events = Array.isArray(h.events) ? h.events : [];
         const unknown = events.filter(function (e) { return !EVENT_TYPES[e]; });
-        if (unknown.length > 0) { return {error: 'Unknown events: ' + unknown.join(', ')}; }
+        if (unknown.length > 0) { return {error: 'Unknown events: ' + unknown.join(', '), index: i}; }
         const newSecret = (typeof h.secret === 'string' && h.secret) ? h.secret : '';
         // The stored secret is kept only for the same URL. Shared receiver hosts tell users apart by the path,
         // so a changed path can also send the secret to another person
         if (!newSecret && prev && prev.secret && prev.url !== h.url) {
-            return {error: (name || 'Webhook ' + (i + 1)) + ': enter the secret again when you change the URL'};
+            return {error: 'Enter the secret again: the URL changed', index: i};
         }
         const secret = newSecret || (prev && prev.secret) || '';
         if (secret.length < MIN_SECRET_LENGTH || secret.length > MAX_SECRET_LENGTH) {
-            return {error: (name || 'Webhook ' + (i + 1)) + ': the secret must have ' + MIN_SECRET_LENGTH + ' to ' + MAX_SECRET_LENGTH + ' characters'};
+            return {error: 'The secret must have ' + MIN_SECRET_LENGTH + ' to ' + MAX_SECRET_LENGTH + ' characters', index: i};
         }
         result.push({
             id: prev ? prev.id : uuid(),
