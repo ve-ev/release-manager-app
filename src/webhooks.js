@@ -163,6 +163,26 @@ function isBlockedIpv4(a, b) {
 }
 
 /**
+ * Picks the secret to use for a webhook from the widget: the new secret, or else the stored one.
+ * The stored secret is used only for the same URL. Shared receiver hosts tell users apart by the path,
+ * so a changed path could also send the secret to another person.
+ * @param {Object} input Webhook from the widget, with url and an optional new secret
+ * @param {Object|null} prev Stored webhook with the same id
+ * @returns {{secret?: string, error?: string}}
+ */
+function resolveSecret(input, prev) {
+    const newSecret = (typeof input.secret === 'string' && input.secret) ? input.secret : '';
+    if (!newSecret && prev && prev.secret && prev.url !== input.url) {
+        return {error: 'Enter the secret again: the URL changed'};
+    }
+    const secret = newSecret || (prev && prev.secret) || '';
+    if (secret.length < MIN_SECRET_LENGTH || secret.length > MAX_SECRET_LENGTH) {
+        return {error: 'The secret must have ' + MIN_SECRET_LENGTH + ' to ' + MAX_SECRET_LENGTH + ' characters'};
+    }
+    return {secret: secret};
+}
+
+/**
  * Validates the webhooks from the widget and merges them with the stored ones.
  * An empty secret keeps the stored secret; lastDelivery is never taken from the request.
  * @param {Array} incoming
@@ -185,16 +205,9 @@ function mergeWebhooks(incoming, stored) {
         const events = Array.isArray(h.events) ? h.events : [];
         const unknown = events.filter(function (e) { return !EVENT_TYPES[e]; });
         if (unknown.length > 0) { return {error: 'Unknown events: ' + unknown.join(', '), index: i}; }
-        const newSecret = (typeof h.secret === 'string' && h.secret) ? h.secret : '';
-        // The stored secret is kept only for the same URL. Shared receiver hosts tell users apart by the path,
-        // so a changed path can also send the secret to another person
-        if (!newSecret && prev && prev.secret && prev.url !== h.url) {
-            return {error: 'Enter the secret again: the URL changed', index: i};
-        }
-        const secret = newSecret || (prev && prev.secret) || '';
-        if (secret.length < MIN_SECRET_LENGTH || secret.length > MAX_SECRET_LENGTH) {
-            return {error: 'The secret must have ' + MIN_SECRET_LENGTH + ' to ' + MAX_SECRET_LENGTH + ' characters', index: i};
-        }
+        const resolved = resolveSecret(h, prev);
+        if (resolved.error) { return {error: resolved.error, index: i}; }
+        const secret = resolved.secret;
         result.push({
             id: prev ? prev.id : uuid(),
             name: name,
@@ -368,20 +381,28 @@ function send(hook, cloudEvent) {
 }
 
 /**
- * Sends a test event to one webhook and records the result.
+ * Sends a test event to a webhook from the widget; the webhook does not need to be saved.
+ * The result is recorded as lastDelivery only for a saved webhook with the same URL.
  * @param {Object} ctx HTTP handler context
- * @param {Object} hook Stored webhook
- * @returns {{at: string, code: (number|null), error: (string|null)}}
+ * @param {{id?: string, url: string, secret?: string}} input
+ * @returns {{error?: string, delivery?: {at: string, code: (number|null), error: (string|null)}, recorded?: boolean}}
  */
-function sendTest(ctx, hook) {
+function sendTest(ctx, input) {
+    const prev = (input.id && readWebhooks(ctx.project).find(function (h) { return h.id === input.id; })) || null;
+    const urlError = validateWebhookUrl(input.url);
+    if (urlError) { return {error: urlError}; }
+    const resolved = resolveSecret(input, prev);
+    if (resolved.error) { return {error: resolved.error}; }
     const event = toCloudEvent({event: 'TEST', release: {}, prevStatus: null, audit: null, at: new Date().toISOString()},
         ctx.project, ctx.currentUser);
-    const result = send(hook, event);
-    const hooks = readWebhooks(ctx.project).map(function (h) {
-        return h.id === hook.id ? Object.assign({}, h, {lastDelivery: result}) : h;
-    });
-    writeWebhooks(ctx.project, hooks);
-    return result;
+    const delivery = send({url: input.url, secret: resolved.secret}, event);
+    const recorded = !!prev && prev.url === input.url;
+    if (recorded) {
+        writeWebhooks(ctx.project, readWebhooks(ctx.project).map(function (h) {
+            return h.id === prev.id ? Object.assign({}, h, {lastDelivery: delivery}) : h;
+        }));
+    }
+    return {delivery: delivery, recorded: recorded};
 }
 
 /**

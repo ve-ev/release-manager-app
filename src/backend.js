@@ -1632,7 +1632,7 @@ exports.httpHandler = {
             }
         },
         /**
-         * POST /webhooks-test - Send a test event to one saved webhook and return the result
+         * POST /webhooks-test - Send a test event to a webhook from the form (saved or not) and return the result
          */
         {
             method: 'POST',
@@ -1647,13 +1647,13 @@ exports.httpHandler = {
                     sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, 'The Outbound Webhooks feature is disabled');
                     return;
                 }
-                const body = ctx.request.json() || {};
-                const hook = webhooks.readWebhooks(ctx.project).find(function (h) { return h.id === body.id; });
-                if (!hook) {
-                    sendErrorResponse(ctx, HTTP_STATUS.NOT_FOUND, 'Webhook not found. Save the webhook before you test it.');
+                // The widget sends the webhook as it is in the form, so a webhook can be tested before it is saved
+                const result = webhooks.sendTest(ctx, ctx.request.json() || {});
+                if (result.error) {
+                    sendErrorResponse(ctx, HTTP_STATUS.BAD_REQUEST, result.error);
                     return;
                 }
-                ctx.response.json(webhooks.sendTest(ctx, hook));
+                ctx.response.json(result);
             }
         },
         /**
