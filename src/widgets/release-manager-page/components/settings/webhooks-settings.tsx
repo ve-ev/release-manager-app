@@ -75,6 +75,11 @@ const DeliveryStatus: React.FC<{ delivery: WebhookDelivery | null }> = ({deliver
 
 const cardErrorId = (key: string) => `webhook-error-${key}`;
 
+interface TestResult {
+  text: string;
+  ok: boolean;
+}
+
 interface CardProps {
   draft: Draft;
   index: number;
@@ -87,6 +92,7 @@ interface CardProps {
   canTest: boolean;
   /** Save error of this webhook, from the backend */
   error: string;
+  testResult: TestResult | null;
   onToggle: () => void;
   onChange: (patch: Partial<Draft>) => void;
   onToggleSecret: () => void;
@@ -98,7 +104,7 @@ interface CardProps {
 
 // eslint-disable-next-line complexity
 const WebhookCard: React.FC<CardProps> = ({
-  draft: d, index, isOpen, allowedEvents, secretVisible, urlError, secretError, isTesting, canTest, error,
+  draft: d, index, isOpen, allowedEvents, secretVisible, urlError, secretError, isTesting, canTest, error, testResult,
   onToggle, onChange, onToggleSecret, onUrlBlur, onSecretBlur, onTest, onDelete
 }) => {
   const bodyId = `webhook-body-${d.key}`;
@@ -203,6 +209,10 @@ const WebhookCard: React.FC<CardProps> = ({
           </div>
           {!d.id && <div className="field-help webhook-test-hint">Save the webhook before you send a test event.</div>}
           {d.id && !canTest && !isTesting && <div className="field-help webhook-test-hint">Save the changes before you send a test event.</div>}
+          {/* Always in the DOM, so screen readers announce the result when it appears */}
+          <div className={`webhook-test-result${testResult && !testResult.ok ? ' failed' : ''}`} role="status" aria-live="polite">
+            {testResult?.text}
+          </div>
         </div>
       )}
     </section>
@@ -228,6 +238,7 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
   const [error, setError] = useState<string | null>(null);
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
   const [status, setStatus] = useState('');
+  const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showSecret, setShowSecret] = useState<Set<string>>(new Set());
   const [urlErrors, setUrlErrors] = useState<Record<string, string>>({});
@@ -297,16 +308,16 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
   const handleTest = useCallback(async (draft: Draft) => {
     if (!draft.id) { return; }
     setTestingKey(draft.key);
-    setStatus('');
+    setTestResults(prev => ({...prev, [draft.key]: {text: '', ok: true}}));
     try {
       const delivery = await api.testWebhook(draft.id);
       setSaved(prev => prev.map(w => (w.id === draft.id ? {...w, lastDelivery: delivery} : w)));
       update(draft.key, {lastDelivery: delivery});
-      setStatus(delivery.error
-        ? `Test event to ${draft.name || hostOf(draft.url)} failed: ${delivery.error}`
-        : `Test event to ${draft.name || hostOf(draft.url)} delivered, HTTP ${delivery.code}`);
+      setTestResults(prev => ({...prev, [draft.key]: delivery.error
+        ? {text: `Test event failed: ${delivery.error}`, ok: false}
+        : {text: `Test event delivered, HTTP ${delivery.code}`, ok: true}}));
     } catch (e) {
-      setStatus(getBackendErrorMessage(e, 'Failed to send the test event'));
+      setTestResults(prev => ({...prev, [draft.key]: {text: getBackendErrorMessage(e, 'Failed to send the test event'), ok: false}}));
     } finally {
       setTestingKey(null);
     }
@@ -367,6 +378,7 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
               isTesting={testingKey === d.key}
               canTest={!!d.id && !isDirty && testingKey === null}
               error={cardErrors[d.key] || ''}
+              testResult={testResults[d.key] || null}
               onToggle={() => setExpanded(prev => toggleIn(prev, d.key))}
               onChange={patch => update(d.key, patch)}
               onToggleSecret={() => setShowSecret(prev => toggleIn(prev, d.key))}
@@ -384,11 +396,10 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
         <span className="webhooks-count">{drafts.length} of {maxWebhooks}</span>
       </div>
 
-      <div className="webhooks-live" role="status" aria-live="polite">{status}</div>
-
       <div className="settings-separator horizontal" role="separator" aria-orientation="horizontal"/>
 
       <div className="settings-actions">
+        <span className="webhooks-saved" role="status" aria-live="polite">{status}</span>
         <Button onClick={onClose}>Cancel</Button>
         <Button primary onClick={handleSave} disabled={isSaving || !isDirty}>
           {isSaving ? 'Saving...' : 'Save'}
