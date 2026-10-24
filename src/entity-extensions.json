@@ -20,6 +20,12 @@
         },
         "calendarSnapshot": {
           "type": "string"
+        },
+        "webhooks": {
+          "type": "string"
+        },
+        "webhookOutbox": {
+          "type": "string"
         }
       }
     },

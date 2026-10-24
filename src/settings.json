@@ -41,6 +41,11 @@
       "title": "Feature: Auto-attach by Filter",
       "description": "When enabled, a release can have a YouTrack search query. Issues in the project that match the query are added to the release's planned issues automatically, and are removed when they stop matching. Issues added by hand are never removed. Works only when 'Custom Field Sync' is off. Requires the 'Auto-attach Issues by Filter' workflow to be active in the project.",
       "type": "boolean"
+    },
+    "outboundWebhooks": {
+      "title": "Feature: Outbound Webhooks",
+      "description": "When enabled, release managers can add up to 5 webhooks in the project's app settings. Each webhook has an HTTPS URL, a secret, and a list of release events, such as a status change or a feature freeze. After a selected event is saved, the app sends a POST request in the CloudEvents 1.0 format to the URL. The secret is sent in the Authorization header. A failed delivery never blocks the change to the release.",
+      "type": "boolean"
     }
   },
   "required": [
