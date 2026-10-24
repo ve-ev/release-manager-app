@@ -201,7 +201,11 @@ describe('sendTest', () => {
     const result = webhooks.sendTest(newCtx(), {url: 'https://new.example.com/hook', secret: other});
     expect(result).toMatchObject({recorded: false, delivery: {code: 200, error: null}});
     expect(calls[0]).toMatchObject({url: 'https://new.example.com/hook', headers: {Authorization: 'Bearer ' + other}});
-    expect(JSON.parse(calls[0].payload).type).toBe('youtrack.release-manager.webhook.test');
+    const testEvent = JSON.parse(calls[0].payload);
+    expect(testEvent.type).toBe('youtrack.release-manager.webhook.test');
+    // CloudEvents: a present subject must not be empty
+    expect('subject' in testEvent).toBe(false);
+    expect(testEvent.data.release).toBeNull();
     expect(hook().lastDelivery).toBeUndefined();
   });
 
