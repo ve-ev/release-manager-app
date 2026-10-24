@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import source from '../backend.js?raw';
+import {loadWebhooks} from './helpers/load-webhooks';
 
 type Endpoint = { method: string; path: string; handle: (ctx: unknown) => void };
 
@@ -11,33 +12,38 @@ const entitiesStub = {Issue: {findById: (id: string) => issues[id] || null}, Pro
 
 // backend.js is a YouTrack CommonJS module; run it with stub YouTrack APIs
 const moduleExports: { httpHandler?: { endpoints: Endpoint[] } } = {};
+const {webhooks} = loadWebhooks();
 // eslint-disable-next-line no-new-func
 new Function('require', 'exports', source)(
-  (name: string) => (name.includes('entities') ? entitiesStub : {}),
+  (name: string) => {
+    if (name.includes('entities')) { return entitiesStub; }
+    return name.includes('webhooks') ? webhooks : {};
+  },
   moduleExports
 );
 const endpoints = moduleExports.httpHandler!.endpoints;
 
-function call(method: string, path: string, role: 'rm' | 'lm' | 'none', body: unknown = {}) {
+function call(method: string, path: string, role: 'rm' | 'lm' | 'none', body: unknown = {}, props: Record<string, string> = {}) {
   const endpoint = endpoints.find(e => e.method === method && e.path === path)!;
   const project = {
     shortName: 'DEMO',
     extensionProperties: {
       releases: JSON.stringify([{id: '1', version: '1.0', releaseDate: '2026-01-01', status: 'Planning'}]),
-      appSettings: JSON.stringify({customFieldMapping: {plannedReleaseField: 'Fix versions'}})
+      appSettings: JSON.stringify({customFieldMapping: {plannedReleaseField: 'Fix versions'}}),
+      ...props
     } as Record<string, string>,
     findFieldByName: (name: string) => ({name, findValueByName: () => null, createValue: (v: string) => ({name: v})})
   };
   const ctx = {
-    settings: {releaseManagers: [{name: 'rm'}], lightManagers: [{name: 'lm'}], customFieldsMapping: true},
+    settings: {releaseManagers: [{name: 'rm'}], lightManagers: [{name: 'lm'}], customFieldsMapping: true, outboundWebhooks: true},
     currentUser: {login: 'u', isInGroup: (group: string) => group === role},
     project,
     globalStorage: {extensionProperties: {}},
     request: {json: () => body, getParameter: () => '1'},
-    response: {code: 200, json: () => {}}
+    response: {code: 200, body: undefined as unknown, json(value: unknown) { this.body = value; }}
   };
   endpoint.handle(ctx);
-  return {code: ctx.response.code, project};
+  return {code: ctx.response.code, project, body: ctx.response.body};
 }
 
 const FORBIDDEN = 403;
@@ -47,7 +53,10 @@ describe('write endpoints enforce roles on the server', () => {
     ['POST', 'releases'],
     ['DELETE', 'release'],
     ['PUT', 'app-settings'],
-    ['POST', 'import-versions']
+    ['POST', 'import-versions'],
+    ['GET', 'webhooks'],
+    ['PUT', 'webhooks'],
+    ['POST', 'webhooks-test']
   ])('%s %s is for release managers only', (method, path) => {
     expect(call(method, path, 'lm').code).toBe(FORBIDDEN);
     expect(call(method, path, 'none').code).toBe(FORBIDDEN);
@@ -141,5 +150,37 @@ describe('release revisions', () => {
     addIssueToRelease({project}, '1', 'DEMO-1');
     expect(storedRelease(project).revision).toBe(4);
     expect(putRelease(project, {...release, revision: 3}).code).toBe(409);
+  });
+});
+
+describe('webhooks endpoints', () => {
+  const SECRET = 's'.repeat(40);
+  const stored = JSON.stringify([{
+    id: 'h1', name: 'CI', url: 'https://ci.example.com/hook', secret: SECRET,
+    events: ['RELEASE_COMPLETED'], enabled: true, lastDelivery: {at: 't', code: 200, error: null}
+  }]);
+
+  it('GET never returns the secret', () => {
+    const {body} = call('GET', 'webhooks', 'rm', {}, {webhooks: stored});
+    const hooks = (body as { webhooks: Record<string, unknown>[] }).webhooks;
+    expect(hooks[0].secret).toBeUndefined();
+    expect(hooks[0].hasSecret).toBe(true);
+  });
+
+  it('PUT keeps the stored secret and lastDelivery when the widget sends an empty secret', () => {
+    const {code, project} = call('PUT', 'webhooks', 'rm', {
+      webhooks: [{id: 'h1', name: 'CI 2', url: 'https://ci.example.com/hook', secret: '', events: ['STATUS_CHANGED'], lastDelivery: null}]
+    }, {webhooks: stored});
+    expect(code).toBe(200);
+    const saved = JSON.parse(project.extensionProperties.webhooks);
+    expect(saved[0]).toMatchObject({id: 'h1', name: 'CI 2', secret: SECRET, events: ['STATUS_CHANGED']});
+    expect(saved[0].lastDelivery).toMatchObject({code: 200});
+  });
+
+  it('PUT rejects more than 5 webhooks and leaves the stored ones', () => {
+    const hook = {url: 'https://ci.example.com/hook', secret: SECRET, events: []};
+    const {code, project} = call('PUT', 'webhooks', 'rm', {webhooks: Array(6).fill(hook)}, {webhooks: stored});
+    expect(code).toBe(400);
+    expect(project.extensionProperties.webhooks).toBe(stored);
   });
 });
