@@ -7,6 +7,7 @@ interface AppConfig {
     metaIssuesEnabled: boolean;
     customFieldsMapping: boolean;
     autoAttachByFilter: boolean;
+    outboundWebhooks: boolean;
 }
 
 // --- Module-level cache to ensure the config is fetched only once per session ---
@@ -21,7 +22,8 @@ export function useAppConfig(api: API) {
         manualIssueManagement: false,
         metaIssuesEnabled: false,
         customFieldsMapping: false,
-        autoAttachByFilter: false
+        autoAttachByFilter: false,
+        outboundWebhooks: false
     });
 
     useEffect(() => {
@@ -56,7 +58,8 @@ export function useAppConfig(api: API) {
                         manualIssueManagement,
                         metaIssuesEnabled,
                         customFieldsMapping,
-                        autoAttachByFilter: !!appConfig.autoAttachByFilter
+                        autoAttachByFilter: !!appConfig.autoAttachByFilter,
+                        outboundWebhooks: !!appConfig.outboundWebhooks
                     };
                     cachedAppConfig = cfg;
                     return cfg;

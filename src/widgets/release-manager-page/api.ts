@@ -1,6 +1,6 @@
 import {HostAPI} from "../../../@types/globals";
 import {ReleaseVersion} from "./interfaces";
-import {AppSettings, Permissions} from "./interfaces";
+import {AppSettings, Permissions, Webhook, WebhookDelivery, WebhookInput, WebhooksResponse} from "./interfaces";
 import {logger} from './utils/logger';
 /* eslint-disable complexity */
 
@@ -377,5 +377,25 @@ export class API {
     } catch {
       // Non-critical — silently ignore if user is not RM or request fails
     }
+  }
+
+  // ----- Outbound webhooks -----
+  async getWebhooks(): Promise<WebhooksResponse> {
+    return this.fetchJson<WebhooksResponse>('backend/webhooks');
+  }
+
+  async saveWebhooks(webhooks: WebhookInput[]): Promise<Webhook[]> {
+    const res = await this.fetchJson<{ webhooks: Webhook[] }>('backend/webhooks', {
+      method: 'PUT',
+      body: {webhooks}
+    });
+    return res.webhooks;
+  }
+
+  async testWebhook(id: string): Promise<WebhookDelivery> {
+    return this.fetchJson<WebhookDelivery>('backend/webhooks-test', {
+      method: 'POST',
+      body: {id}
+    });
   }
 }

@@ -263,3 +263,173 @@
   background: var(--ring-icon-color);
   color: var(--ring-content-background-color);
 }
+
+/* Settings tabs (General | Webhooks) */
+.settings-tabs {
+  margin-bottom: 16px;
+}
+
+/* Outbound webhooks */
+.webhooks-error {
+  margin: 8px 0 16px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  color: var(--ring-error-color);
+  background: var(--ring-error-container-light-color);
+  overflow-wrap: anywhere;
+}
+
+.webhooks-error:focus-visible {
+  outline: 2px solid var(--ring-error-color);
+  outline-offset: 2px;
+}
+
+.webhooks-empty {
+  margin: 8px 0 16px;
+}
+
+.webhooks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+
+.webhook-card {
+  min-width: 0;
+  border: 1px solid var(--ring-line-color);
+  border-radius: 4px;
+}
+
+.webhook-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  min-width: 0;
+}
+
+.webhook-card-toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+/* The chevron answers the click; no motion when the user asks for less */
+.webhook-card-toggle svg {
+  transition: transform 150ms ease-out;
+}
+
+.webhook-card-toggle.open svg {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .webhook-card-toggle svg {
+    transition: none;
+  }
+}
+
+.webhook-card-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.webhook-status {
+  font-size: 12px;
+  color: var(--ring-secondary-color);
+  white-space: nowrap;
+}
+
+.webhook-status.ok {
+  color: var(--ring-success-color);
+}
+
+.webhook-status.failed {
+  color: var(--ring-error-color);
+}
+
+.webhook-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 12px 12px;
+  min-width: 0;
+}
+
+.webhook-card-body input {
+  overflow-wrap: anywhere;
+}
+
+.webhook-secret {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.webhook-secret > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.webhook-events {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.webhook-event-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 8px;
+}
+
+.webhook-event-group-title {
+  flex: 0 0 120px;
+  color: var(--ring-secondary-color);
+}
+
+.webhook-event-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.webhook-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.webhook-card-actions-spacer {
+  flex: 1;
+}
+
+.webhooks-add {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.webhooks-live {
+  margin-top: 8px;
+  min-height: 20px;
+  color: var(--ring-secondary-color);
+  overflow-wrap: anywhere;
+}
+
+.webhook-delivery-details {
+  font-size: 12px;
+  color: var(--ring-secondary-color);
+  overflow-wrap: anywhere;
+}
+
+.webhook-delivery-details.failed {
+  color: var(--ring-error-color);
+}

@@ -195,3 +195,36 @@ export interface DateHighlighting {
   featureFreezeDateClassName: string;
 }
 
+
+export interface WebhookDelivery {
+  at: string;
+  code: number | null;
+  error: string | null;
+}
+
+/** Webhook as the backend returns it: the secret is never sent to the widget */
+export interface Webhook {
+  id: string;
+  name: string;
+  url: string;
+  hasSecret: boolean;
+  events: string[];
+  enabled: boolean;
+  lastDelivery: WebhookDelivery | null;
+}
+
+/** Webhook as the widget sends it: an empty secret keeps the stored secret */
+export interface WebhookInput {
+  id?: string;
+  name: string;
+  url: string;
+  secret: string;
+  events: string[];
+  enabled: boolean;
+}
+
+export interface WebhooksResponse {
+  events: string[];
+  maxWebhooks: number;
+  webhooks: Webhook[];
+}
