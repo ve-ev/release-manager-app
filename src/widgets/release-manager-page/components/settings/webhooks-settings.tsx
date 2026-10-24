@@ -146,7 +146,7 @@ const WebhookCard: React.FC<CardProps> = ({
               value={d.secret}
               onChange={e => onChange({secret: e.target.value})}
               placeholder={d.hasSecret ? 'Saved. Type a new value to replace it.' : `At least ${MIN_SECRET_LENGTH} characters`}
-              help="Sent as “Authorization: Bearer <secret>”. You cannot see a saved secret again."
+              help="Sent as “Authorization: Bearer <secret>”. You cannot see a saved secret again. When you change the URL, enter the secret again."
             />
             {d.secret && (
               <Button inline onClick={onToggleSecret}>{secretVisible ? 'Hide' : 'Show'}</Button>
