@@ -1,6 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import Button from '@jetbrains/ring-ui-built/components/button/button';
 import Panel from '@jetbrains/ring-ui-built/components/panel/panel';
+import Tabs from '@jetbrains/ring-ui-built/components/tabs/dumb-tabs';
+import Tab from '@jetbrains/ring-ui-built/components/tabs/tab';
 import { api } from '../../app';
 import '../../styles/settings.css';
 import {AppSettings} from '../../interfaces';
@@ -11,6 +13,9 @@ import {invalidateProgressCache} from '../../utils/progress-cache';
 import {CustomFieldMapping} from './custom-field-mapping';
 import {ProgressTrackingSettings} from './progress-tracking-settings';
 import {TagsSettings} from './tags-settings.tsx';
+import {WebhooksSettings} from './webhooks-settings';
+
+type SettingsTab = 'general' | 'webhooks';
 
 
 /**
@@ -24,6 +29,7 @@ interface AppSettingsFormProps {
 /**
  * Component for configuring progress tracking settings
  */
+// eslint-disable-next-line complexity
 export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose, onOpenImport }) => {
   // Use custom hook to fetch and manage settings data
   const { settings, setSettings, isLoading, error: loadError } = useSettingsData(api);
@@ -37,6 +43,9 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose, onOpenIm
 
   // State for tracking saving state
   const [isSaving, setIsSaving] = useState(false);
+
+  // Webhooks have their own endpoint and Save, so they live on their own tab
+  const [tab, setTab] = useState<SettingsTab>('general');
 
   // Zone input fields moved into ProgressTrackingSettings
 
@@ -156,15 +165,23 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose, onOpenIm
           <div className="settings-loading">Loading settings...</div>
         ) : (
           <>
-            <div className={`settings-layout ${appConfig.customFieldsMapping ? 'two-columns' : 'single-column'}`}>
-              <ProgressTrackingSettings
-                settings={settings}
-                setSettings={setSettings}
-                errors={errors}
-                setErrors={setErrors}
-              />
+            {appConfig.outboundWebhooks && (
+              <Tabs className="settings-tabs" selected={tab} onSelect={key => setTab(key as SettingsTab)}>
+                <Tab id="general" title="General"/>
+                <Tab id="webhooks" title="Webhooks"/>
+              </Tabs>
+            )}
+            {/* Both tabs stay mounted, so unsaved changes on one tab are kept while the other tab is open */}
+            <div hidden={tab !== 'general'}>
+              <div className={`settings-layout ${appConfig.customFieldsMapping ? 'two-columns' : 'single-column'}`}>
+                <ProgressTrackingSettings
+                  settings={settings}
+                  setSettings={setSettings}
+                  errors={errors}
+                  setErrors={setErrors}
+                />
 
-              {appConfig.customFieldsMapping && (
+                {appConfig.customFieldsMapping && (
                 <>
                   <div className="settings-separator" role="separator" aria-orientation="vertical"/>
                   <div className="settings-column right">
@@ -199,33 +216,39 @@ export const SettingsForm: React.FC<AppSettingsFormProps> = ({ onClose, onOpenIm
                   </div>
                 </>
               )}
+              </div>
+
+              <div className="settings-separator horizontal" role="separator" aria-orientation="horizontal"/>
+
+              <TagsSettings
+                settings={settings}
+                setSettings={setSettings}
+                newProductName={newProductName}
+                setNewProductName={setNewProductName}
+                editProductId={editProductId}
+                editProductName={editProductName}
+                setEditProductId={setEditProductId}
+                setEditProductName={setEditProductName}
+                handleAddProduct={handleAddProduct}
+                startEditProduct={startEditProduct}
+                handleSaveProduct={handleSaveProduct}
+                handleDeleteProduct={handleDeleteProduct}
+              />
+
+              <div className="settings-separator horizontal" role="separator" aria-orientation="horizontal"/>
+
+              <div className="settings-actions">
+                <Button onClick={onClose}>Cancel</Button>
+                <Button primary onClick={handleSave} disabled={isSaving}>
+                  {isSaving ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
             </div>
-
-            <div className="settings-separator horizontal" role="separator" aria-orientation="horizontal"/>
-
-            <TagsSettings
-              settings={settings}
-              setSettings={setSettings}
-              newProductName={newProductName}
-              setNewProductName={setNewProductName}
-              editProductId={editProductId}
-              editProductName={editProductName}
-              setEditProductId={setEditProductId}
-              setEditProductName={setEditProductName}
-              handleAddProduct={handleAddProduct}
-              startEditProduct={startEditProduct}
-              handleSaveProduct={handleSaveProduct}
-              handleDeleteProduct={handleDeleteProduct}
-            />
-
-            <div className="settings-separator horizontal" role="separator" aria-orientation="horizontal"/>
-
-            <div className="settings-actions">
-              <Button onClick={onClose}>Cancel</Button>
-              <Button primary onClick={handleSave} disabled={isSaving}>
-                {isSaving ? 'Saving...' : 'Save'}
-              </Button>
-            </div>
+            {appConfig.outboundWebhooks && (
+              <div hidden={tab !== 'webhooks'}>
+                <WebhooksSettings api={api} onClose={onClose}/>
+              </div>
+            )}
           </>
         )}
       </Panel>
