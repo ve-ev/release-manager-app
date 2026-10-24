@@ -42,6 +42,8 @@ const RETRY_DELAY_MS = 60000;
 const MAX_SENDS_PER_RUN = 5;
 // ponytail: a receiver that is down for a long time must not grow the project property without limit
 const MAX_OUTBOX = 200;
+// ponytail: newest entries only, for the whole project; a longer history needs its own storage
+const MAX_DELIVERY_LOG = 100;
 const ASYNC_FUNCTION = 'deliverWebhooks';
 const PROJECT_KEY = 'webhookProject';
 
@@ -85,6 +87,50 @@ function readWebhooks(project) {
 
 function writeWebhooks(project, hooks) {
     project.extensionProperties.webhooks = JSON.stringify(hooks);
+}
+
+function hostOf(url) {
+    const match = String(url || '').match(/^https?:\/\/([^/?#]+)/i);
+    return match ? match[1].toLowerCase() : '';
+}
+
+/**
+ * Delivery log entry for one attempt. The request body is not stored: it is large and has release data.
+ * @param {Object} hook
+ * @param {Object} cloudEvent
+ * @param {{at: string, code: (number|null), error: (string|null)}} result
+ * @param {number} attempt 1 for the first attempt
+ */
+function deliveryLogEntry(hook, cloudEvent, result, attempt) {
+    return {
+        id: cloudEvent.id,
+        hookId: hook.id,
+        event: cloudEvent.data.event,
+        subject: cloudEvent.subject || null,
+        host: hostOf(hook.url),
+        at: result.at,
+        attempt: attempt,
+        code: result.code,
+        error: result.error
+    };
+}
+
+function appendDeliveryLog(project, entries) {
+    if (entries.length === 0) { return; }
+    const entriesLog = readJson(project, 'webhookDeliveries', []).concat(entries);
+    project.extensionProperties.webhookDeliveries = JSON.stringify(entriesLog.slice(-MAX_DELIVERY_LOG));
+}
+
+/**
+ * Delivery log of the webhooks that still exist, newest first.
+ * @param {Object} project
+ * @returns {Array}
+ */
+function readDeliveryLog(project) {
+    const ids = {};
+    readWebhooks(project).forEach(function (h) { ids[h.id] = true; });
+    const entries = readJson(project, 'webhookDeliveries', []);
+    return (Array.isArray(entries) ? entries : []).filter(function (e) { return ids[e.hookId]; }).reverse();
 }
 
 /**
@@ -401,6 +447,7 @@ function sendTest(ctx, input) {
         writeWebhooks(ctx.project, readWebhooks(ctx.project).map(function (h) {
             return h.id === prev.id ? Object.assign({}, h, {lastDelivery: delivery}) : h;
         }));
+        appendDeliveryLog(ctx.project, [deliveryLogEntry(prev, event, delivery, 1)]);
     }
     return {delivery: delivery, recorded: recorded};
 }
@@ -425,6 +472,7 @@ function deliverWebhooks(ctx) {
     const remaining = [];
     let sent = 0;
     let nextAt = 0;
+    const logEntries = [];
     outbox.forEach(function (entry) {
         const hook = hooksById[entry.hookId];
         if (!hook || !hook.enabled) { return; }
@@ -436,6 +484,7 @@ function deliverWebhooks(ctx) {
         sent++;
         const result = send(hook, entry.event);
         hook.lastDelivery = result;
+        logEntries.push(deliveryLogEntry(hook, entry.event, result, entry.attempt + 1));
         if (result.error) {
             log('delivery to "' + (hook.name || hook.url) + '" failed: ' + result.error);
             const attempt = entry.attempt + 1;
@@ -447,6 +496,7 @@ function deliverWebhooks(ctx) {
         }
     });
     writeWebhooks(project, hooks);
+    appendDeliveryLog(project, logEntries);
     project.extensionProperties.webhookOutbox = remaining.length ? JSON.stringify(remaining) : null;
     if (remaining.length > 0) {
         scheduleDelivery(ctx, project, Math.max(0, nextAt - now));
@@ -456,6 +506,7 @@ function deliverWebhooks(ctx) {
 exports.EVENT_TYPES = EVENT_TYPES;
 exports.MAX_WEBHOOKS = MAX_WEBHOOKS;
 exports.readWebhooks = readWebhooks;
+exports.readDeliveryLog = readDeliveryLog;
 exports.writeWebhooks = writeWebhooks;
 exports.maskWebhook = maskWebhook;
 exports.validateWebhookUrl = validateWebhookUrl;

@@ -8,7 +8,7 @@ import Tooltip from '@jetbrains/ring-ui-built/components/tooltip/tooltip';
 import {H3} from '@jetbrains/ring-ui-built/components/heading/heading';
 import chevronRightIcon from '@jetbrains/icons/chevron-right';
 import {API} from '../../api';
-import {Webhook, WebhookDelivery, WebhookInput} from '../../interfaces';
+import {Webhook, WebhookDelivery, WebhookInput, WebhookLogEntry} from '../../interfaces';
 import {getBackendErrorMessage} from '../../utils/helpers';
 import {generateClientId} from '../../utils/id-generator';
 
@@ -20,6 +20,13 @@ const EVENT_GROUPS: Array<{ title: string; events: Array<[string, string]> }> = 
   {title: 'Auto-attach', events: [['AUTO_ATTACHED', 'Issues attached'], ['AUTO_DETACHED', 'Issues detached']]}
 ];
 const DEFAULT_EVENTS = ['RELEASE_COMPLETED'];
+/** Event names in the delivery log, where the group title is not visible */
+const LOG_EVENT_LABELS: Record<string, string> = {
+  RELEASE_CREATED: 'Release created', RELEASE_DELETED: 'Release deleted', STATUS_CHANGED: 'Status changed',
+  RELEASE_COMPLETED: 'Released', FREEZE_CONFIRMED: 'Feature freeze confirmed', UNFROZEN: 'Unfrozen',
+  PLANNED_ISSUES_CHANGED: 'Planned issues changed', DESCRIPTION_CHANGED: 'Description changed',
+  AUTO_ATTACHED: 'Issues auto-attached', AUTO_DETACHED: 'Issues auto-detached', TEST: 'Test event'
+};
 const MIN_SECRET_LENGTH = 32;
 const MINUTE_MS = 60000;
 const MINUTES_PER_HOUR = 60;
@@ -80,6 +87,30 @@ interface TestResult {
   ok: boolean;
 }
 
+const DeliveryLog: React.FC<{ entries: WebhookLogEntry[]; id: string }> = ({entries, id}) => (
+  <div className="webhook-log" id={id}>
+    <table>
+      <thead>
+        <tr><th scope="col">Time</th><th scope="col">Event</th><th scope="col">Release</th><th scope="col">Result</th></tr>
+      </thead>
+      <tbody>
+        {entries.map(e => (
+          <tr key={`${e.id}-${e.attempt}-${e.at}`}>
+            <td>{new Date(e.at).toLocaleString()}</td>
+            <td>{LOG_EVENT_LABELS[e.event] || e.event}</td>
+            <td>{e.subject || '—'}</td>
+            <td className={e.error ? 'failed' : 'ok'}>
+              <span aria-hidden="true">{e.error ? '✕' : '✓'}</span>{' '}
+              {e.error || `HTTP ${e.code}`}
+              {e.attempt > 1 ? ` · attempt ${e.attempt}` : ''}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
 interface CardProps {
   draft: Draft;
   index: number;
@@ -93,6 +124,8 @@ interface CardProps {
   /** Save error of this webhook, from the backend */
   error: string;
   testResult: TestResult | null;
+  /** Delivery log of this webhook, newest first */
+  deliveries: WebhookLogEntry[];
   onToggle: () => void;
   onChange: (patch: Partial<Draft>) => void;
   onToggleSecret: () => void;
@@ -104,10 +137,12 @@ interface CardProps {
 
 // eslint-disable-next-line complexity
 const WebhookCard: React.FC<CardProps> = ({
-  draft: d, index, isOpen, allowedEvents, secretVisible, urlError, secretError, isTesting, canTest, error, testResult,
+  draft: d, index, isOpen, allowedEvents, secretVisible, urlError, secretError, isTesting, canTest, error, testResult, deliveries,
   onToggle, onChange, onToggleSecret, onUrlBlur, onSecretBlur, onTest, onDelete
 }) => {
   const bodyId = `webhook-body-${d.key}`;
+  const logId = `webhook-log-${d.key}`;
+  const [logOpen, setLogOpen] = useState(false);
   const title = d.name || hostOf(d.url) || `Webhook ${index + 1}`;
   return (
     <section className="webhook-card" aria-label={title}>
@@ -213,6 +248,17 @@ const WebhookCard: React.FC<CardProps> = ({
             <Button onClick={onTest} disabled={!canTest}>Send test event</Button>
             <Button danger onClick={onDelete}>Delete</Button>
           </div>
+
+          {d.id && (deliveries.length === 0 ? (
+            <div className="field-help">No deliveries yet.</div>
+          ) : (
+            <div>
+              <Button inline aria-expanded={logOpen} aria-controls={logId} onClick={() => setLogOpen(open => !open)}>
+                {logOpen ? 'Hide delivery log' : `Show delivery log (${deliveries.length})`}
+              </Button>
+              {logOpen && <DeliveryLog entries={deliveries} id={logId}/>}
+            </div>
+          ))}
         </div>
       )}
     </section>
@@ -238,6 +284,7 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
   const [error, setError] = useState<string | null>(null);
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
+  const [deliveries, setDeliveries] = useState<WebhookLogEntry[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showSecret, setShowSecret] = useState<Set<string>>(new Set());
   const [urlErrors, setUrlErrors] = useState<Record<string, string>>({});
@@ -254,6 +301,7 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
         setSaved(res.webhooks);
         setDrafts(res.webhooks.map(toDraft));
         setAllowedEvents(res.events);
+        setDeliveries(res.deliveries || []);
         setMaxWebhooks(res.maxWebhooks);
       })
       .catch(e => { if (mounted) { setError(getBackendErrorMessage(e, 'Failed to load webhooks')); } })
@@ -312,6 +360,8 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
         // A saved webhook with an unchanged URL: the backend stored the result as the last delivery
         setSaved(prev => prev.map(w => (w.id === draft.id ? {...w, lastDelivery: delivery} : w)));
         update(draft.key, {lastDelivery: delivery});
+        // The backend added the test to the delivery log
+        api.getWebhooks().then(res => setDeliveries(res.deliveries || [])).catch(() => { /* the log updates on the next open */ });
       }
       setTestResults(prev => ({...prev, [draft.key]: delivery.error
         ? {text: `Failed: ${delivery.error}`, ok: false}
@@ -379,6 +429,7 @@ export const WebhooksSettings: React.FC<Props> = ({api, onClose}) => {
               canTest={!!d.url && testingKey === null}
               error={cardErrors[d.key] || ''}
               testResult={testResults[d.key] || null}
+              deliveries={deliveries.filter(e => e.hookId === d.id)}
               onToggle={() => setExpanded(prev => toggleIn(prev, d.key))}
               onChange={patch => update(d.key, patch)}
               onToggleSecret={() => setShowSecret(prev => toggleIn(prev, d.key))}

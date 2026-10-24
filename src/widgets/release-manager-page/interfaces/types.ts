@@ -223,8 +223,23 @@ export interface WebhookInput {
   enabled: boolean;
 }
 
+/** One delivery attempt. The request body is not stored. */
+export interface WebhookLogEntry {
+  id: string;
+  hookId: string;
+  event: string;
+  subject: string | null;
+  host: string;
+  at: string;
+  attempt: number;
+  code: number | null;
+  error: string | null;
+}
+
 export interface WebhooksResponse {
   events: string[];
   maxWebhooks: number;
   webhooks: Webhook[];
+  /** Newest first */
+  deliveries: WebhookLogEntry[];
 }
