@@ -5,7 +5,7 @@ const SECRET = 's'.repeat(40);
 const HOOK = {id: 'h1', name: 'CI', url: 'https://ci.example.com/hook', secret: SECRET, events: ['STATUS_CHANGED'], enabled: true};
 
 function setup(respond?: (url: string) => HttpResponse) {
-  const {webhooks, calls} = loadWebhooks(respond);
+  const {webhooks, calls, respond: respondTo} = loadWebhooks(respond);
   const stored: Record<string, unknown> = {};
   const invokes: { name: string; delay: number }[] = [];
   const project = {shortName: 'DEMO', name: 'Demo', extensionProperties: {webhooks: JSON.stringify([HOOK])} as Record<string, string | null>};
@@ -19,7 +19,16 @@ function setup(respond?: (url: string) => HttpResponse) {
   });
   const outbox = () => JSON.parse(project.extensionProperties.webhookOutbox || '[]');
   const hook = () => JSON.parse(project.extensionProperties.webhooks!)[0];
-  return {webhooks, calls, invokes, project, newCtx, outbox, hook};
+  // Runs the response handler of each request, as YouTrack does after the commit; a handler can send the next event
+  let answered = 0;
+  const respondAll = () => {
+    while (answered < calls.length) {
+      const call = calls[answered++];
+      // postSync calls have no handler: the response was returned at once
+      if (call.handler) {webhooks[call.handler]({...newCtx(), response: respondTo(call.url)});}
+    }
+  };
+  return {webhooks, calls, invokes, project, newCtx, outbox, hook, respondAll};
 }
 
 const statusChange = {type: 'STATUS_CHANGED', at: '2026-01-15T12:00:00Z', by: 'jdoe', releaseId: '1', releaseVersion: '2.4.0', fromStatus: 'Planning', toStatus: 'In progress'};
@@ -97,8 +106,8 @@ describe('enqueue and deliverWebhooks', () => {
     expect(invokes).toEqual([]);
   });
 
-  it('schedules delivery once per execution and sends the event after the commit', () => {
-    const {webhooks, newCtx, outbox, invokes, calls, hook} = setup();
+  it('schedules delivery once per execution and sends one event per execution', () => {
+    const {webhooks, newCtx, outbox, invokes, calls, hook, respondAll} = setup();
     const ctx = newCtx();
     webhooks.enqueue(ctx, before, after);
     webhooks.enqueue(ctx, before, after);
@@ -106,18 +115,32 @@ describe('enqueue and deliverWebhooks', () => {
     expect(invokes).toEqual([{name: 'deliverWebhooks', delay: 0}]);
 
     webhooks.deliverWebhooks(newCtx());
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].handler).toBe('onWebhookResponse');
     expect(calls[0].headers).toMatchObject({'Content-Type': 'application/cloudevents+json', Authorization: 'Bearer ' + SECRET});
     expect(JSON.parse(calls[0].payload).type).toBe('youtrack.release-manager.release.status-changed');
+
+    respondAll();
+    expect(calls).toHaveLength(2);
     expect(outbox()).toEqual([]);
     expect(hook().lastDelivery).toMatchObject({code: 200, error: null});
   });
 
+  it('does not send an event again while its request is in flight', () => {
+    const {webhooks, newCtx, calls, invokes} = setup();
+    webhooks.enqueue(newCtx(), before, after);
+    webhooks.deliverWebhooks(newCtx());
+    webhooks.deliverWebhooks(newCtx());
+    expect(calls).toHaveLength(1);
+    expect(invokes).toHaveLength(1);
+  });
+
   it('retries a failed delivery and drops it after 3 attempts', () => {
-    const {webhooks, newCtx, outbox, invokes, calls, hook, project} = setup(() => ({code: 500, isSuccess: false}));
+    const {webhooks, newCtx, outbox, invokes, calls, hook, project, respondAll} = setup(() => ({code: 500, isSuccess: false}));
     webhooks.enqueue(newCtx(), before, after);
     for (let attempt = 1; attempt <= 3; attempt++) {
       webhooks.deliverWebhooks(newCtx());
+      respondAll();
       // the test does not wait for the retry delay
       const pending = outbox().map((e: object) => ({...e, notBefore: 0}));
       project.extensionProperties.webhookOutbox = pending.length ? JSON.stringify(pending) : null;
@@ -128,19 +151,30 @@ describe('enqueue and deliverWebhooks', () => {
     expect(invokes.slice(1).every(i => i.delay > 0)).toBe(true);
   });
 
+  it('does not send to a stored URL that the current rules block', () => {
+    const {webhooks, newCtx, calls, hook, project} = setup();
+    webhooks.enqueue(newCtx(), before, after);
+    project.extensionProperties.webhooks = JSON.stringify([{...HOOK, url: 'https://localhost/hook'}]);
+    webhooks.deliverWebhooks(newCtx());
+    expect(calls).toHaveLength(0);
+    expect(hook().lastDelivery.error).toMatch(/^Blocked: /);
+  });
+
   it('treats a redirect as a failed delivery, because the YouTrack client does not follow it', () => {
     // The YouTrack http client sets isSuccess for 3xx too (checked on YouTrack 2026.2)
-    const {webhooks, newCtx, hook, outbox} = setup(() => ({code: 302, isSuccess: true}));
+    const {webhooks, newCtx, hook, outbox, respondAll} = setup(() => ({code: 302, isSuccess: true}));
     webhooks.enqueue(newCtx(), before, after);
     webhooks.deliverWebhooks(newCtx());
+    respondAll();
     expect(hook().lastDelivery).toMatchObject({code: 302, error: expect.stringMatching(/redirects are not followed/)});
     expect(outbox()[0].attempt).toBe(1);
   });
 
   it('reports a timeout when there is no response code', () => {
-    const {webhooks, newCtx, hook} = setup(() => ({isSuccess: false}));
+    const {webhooks, newCtx, hook, respondAll} = setup(() => ({isSuccess: false}));
     webhooks.enqueue(newCtx(), before, after);
     webhooks.deliverWebhooks(newCtx());
+    respondAll();
     expect(hook().lastDelivery.error).toMatch(/No response/);
   });
 });
@@ -228,10 +262,11 @@ describe('sendTest', () => {
 
 describe('delivery log', () => {
   it('records each attempt, newest first, without the secret', () => {
-    const {webhooks, newCtx, project} = setup(() => ({code: 500, isSuccess: false}));
+    const {webhooks, newCtx, project, respondAll} = setup(() => ({code: 500, isSuccess: false}));
     webhooks.enqueue(newCtx(), before, after);
     for (let attempt = 1; attempt <= 3; attempt++) {
       webhooks.deliverWebhooks(newCtx());
+      respondAll();
       const pending = JSON.parse(project.extensionProperties.webhookOutbox || '[]').map((e: object) => ({...e, notBefore: 0}));
       project.extensionProperties.webhookOutbox = pending.length ? JSON.stringify(pending) : null;
     }

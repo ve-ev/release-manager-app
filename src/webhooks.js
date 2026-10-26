@@ -3,6 +3,8 @@
  *
  * saveReleaseVersions calls enqueue() in the same transaction as the release write, so an event is
  * delivered only when the save commits. deliverWebhooks() runs as an async function after the commit.
+ * Each execution sends one event with postAsync; onWebhookResponse() records the result and sends the next event.
+ * A test event from the widget is sent with postSync, so the user sees the result at once.
  */
 /* eslint-disable func-names */
 /* eslint-disable complexity */
@@ -38,17 +40,19 @@ const HTTP_REDIRECT_MIN = 300;
 const HTTP_REDIRECT_MAX = 399;
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 60000;
-// ponytail: caps the time one async run keeps its transaction open (5 x TIMEOUT_MS); the rest waits for the next run
-const MAX_SENDS_PER_RUN = 5;
+// A sent event is not sent again during this time. If the response handler does not run, the next run sends the event again.
+const LEASE_MS = 30000;
 // ponytail: a receiver that is down for a long time must not grow the project property without limit
 const MAX_OUTBOX = 200;
 // ponytail: newest entries only, for the whole project; a longer history needs its own storage
 const MAX_DELIVERY_LOG = 100;
 const ASYNC_FUNCTION = 'deliverWebhooks';
+const RESPONSE_HANDLER = 'onWebhookResponse';
 const PROJECT_KEY = 'webhookProject';
+const EVENT_ID_KEY = 'webhookEventId';
 
-// invokeAsync throws when it is called twice in one execution; module state is shared between executions,
-// so the guard is keyed by the ctx object of the execution
+// One execution can schedule only one async call (invokeAsync or postAsync); module state is shared between
+// executions, so the guard is keyed by the ctx object of the execution
 const scheduled = new WeakSet();
 
 /* eslint-disable no-console */
@@ -353,6 +357,7 @@ function scheduleDelivery(ctx, project, delayMs) {
     if (scheduled.has(ctx)) { return; }
     scheduled.add(ctx);
     try {
+        // ponytail: an async chain has at most 10 hops; after that, the outbox waits for the next save
         ctx.store(PROJECT_KEY, project);
         ctx.invokeAsync(ASYNC_FUNCTION, delayMs || 0, 'webhooks-' + project.shortName);
     } catch (e) {
@@ -395,36 +400,138 @@ function enqueue(ctx, storedReleases, nextReleases) {
 }
 
 /**
- * Sends one CloudEvent. Never throws.
+ * Converts the response of a webhook request to a delivery result.
+ * @param {Object|null} response ctx.response of the async response handler
+ * @param {string} at ISO time of the request
+ * @returns {{at: string, code: (number|null), error: (string|null)}}
+ */
+function toResult(response, at) {
+    // The response body is not stored: a receiver can reflect internal data
+    const code = (response && response.code) || null;
+    // isSuccess is also true for 3xx; the client does not follow redirects, so only 2xx is a delivery
+    if (code >= HTTP_OK_MIN && code <= HTTP_OK_MAX) {
+        return {at: at, code: code, error: null};
+    }
+    let error = 'HTTP ' + code;
+    if (response && response.exception) {
+        error = String(response.exception);
+    } else if (!code) {
+        error = 'No response in ' + TIMEOUT_MS + ' ms';
+    } else if (code >= HTTP_REDIRECT_MIN && code <= HTTP_REDIRECT_MAX) {
+        error = 'HTTP ' + code + ': redirects are not followed. Use the final URL.';
+    }
+    return {at: at, code: code, error: error};
+}
+
+function connectionFor(hook) {
+    const connection = new http.Connection(hook.url, null, TIMEOUT_MS);
+    connection.addHeader('Content-Type', 'application/cloudevents+json');
+    if (hook.secret) { connection.bearerAuth(hook.secret); }
+    return connection;
+}
+
+/**
+ * Schedules the POST request for one outbox entry. The request runs after the commit, and
+ * onWebhookResponse gets the response. Never throws.
+ * @returns {boolean} true when the request is scheduled
+ */
+function post(ctx, project, hook, entry) {
+    scheduled.add(ctx);
+    try {
+        ctx.store(PROJECT_KEY, project);
+        ctx.store(EVENT_ID_KEY, entry.event.id);
+        connectionFor(hook).postAsync('', null, JSON.stringify(entry.event), RESPONSE_HANDLER);
+        return true;
+    } catch (e) {
+        // The event stays in the outbox; the next save schedules the delivery again
+        log('cannot schedule the request: ' + (e && (e.message || e)));
+        return false;
+    }
+}
+
+/**
+ * Records the result of one attempt: lastDelivery, the delivery log, and a retry if the attempt failed.
+ * @param {Object} project
+ * @param {Array} outbox Changed in place: the entry is removed or replaced by its retry
+ * @param {Object} entry
+ * @param {Object|null} hook null when the webhook was deleted
+ * @param {{at: string, code: (number|null), error: (string|null)}} result
+ */
+function recordAttempt(project, outbox, entry, hook, result) {
+    const attempt = entry.attempt + 1;
+    const retry = [];
+    if (hook) {
+        writeWebhooks(project, readWebhooks(project).map(function (h) {
+            return h.id === hook.id ? Object.assign({}, h, {lastDelivery: result}) : h;
+        }));
+        appendDeliveryLog(project, [deliveryLogEntry(hook, entry.event, result, attempt)]);
+        if (result.error) {
+            log('delivery to "' + (hook.name || hook.url) + '" failed: ' + result.error);
+            if (attempt < MAX_ATTEMPTS) {
+                retry.push(Object.assign({}, entry, {attempt: attempt, notBefore: Date.now() + RETRY_DELAY_MS * attempt, sentAt: 0}));
+            }
+        }
+    }
+    outbox.splice.apply(outbox, [outbox.indexOf(entry), 1].concat(retry));
+}
+
+function isInFlight(entry, now) {
+    return entry.sentAt > now - LEASE_MS;
+}
+
+/**
+ * Sends the next due event of the outbox, or schedules deliverWebhooks for the next retry.
+ * @param {Object} ctx
+ * @param {Object} project
+ * @param {Array} outbox The outbox as read in this execution
+ */
+function sendNext(ctx, project, outbox) {
+    if (!ctx.settings || !ctx.settings.outboundWebhooks) {
+        project.extensionProperties.webhookOutbox = null;
+        return;
+    }
+    const hooksById = {};
+    readWebhooks(project).forEach(function (h) { hooksById[h.id] = h; });
+    const now = Date.now();
+    // Events of deleted webhooks and unsent events of disabled webhooks are dropped
+    const pending = outbox.filter(function (e) {
+        const h = hooksById[e.hookId];
+        return h && (h.enabled || isInFlight(e, now));
+    });
+    let sent = false;
+    let next = pending.find(function (e) { return !isInFlight(e, now) && e.notBefore <= now; });
+    while (next && !sent) {
+        const hook = hooksById[next.hookId];
+        // Checked again at send time: a stored URL can be older than the current rules
+        const urlError = validateWebhookUrl(hook.url);
+        if (urlError) {
+            recordAttempt(project, pending, next, hook, {at: new Date(now).toISOString(), code: null, error: 'Blocked: ' + urlError});
+            next = pending.find(function (e) { return !isInFlight(e, now) && e.notBefore <= now; });
+        } else {
+            sent = true;
+            if (post(ctx, project, hook, next)) { next.sentAt = now; }
+        }
+    }
+    project.extensionProperties.webhookOutbox = pending.length ? JSON.stringify(pending) : null;
+    if (sent) { return; }
+    // In-flight events are handled by the chain that sent them
+    const waiting = pending.filter(function (e) { return !isInFlight(e, now); });
+    if (waiting.length > 0) {
+        const nextAt = waiting.reduce(function (min, e) { return Math.min(min, e.notBefore); }, Infinity);
+        scheduleDelivery(ctx, project, Math.max(0, nextAt - now));
+    }
+}
+
+/**
+ * Sends one CloudEvent and waits for the response. Never throws.
  * @param {Object} hook
  * @param {Object} cloudEvent
  * @returns {{at: string, code: (number|null), error: (string|null)}}
  */
-function send(hook, cloudEvent) {
+function sendSync(hook, cloudEvent) {
     const at = new Date().toISOString();
-    // Checked again at send time: a stored URL can be older than the current rules
-    const urlError = validateWebhookUrl(hook.url);
-    if (urlError) { return {at: at, code: null, error: 'Blocked: ' + urlError}; }
     try {
-        const connection = new http.Connection(hook.url, null, TIMEOUT_MS);
-        connection.addHeader('Content-Type', 'application/cloudevents+json');
-        if (hook.secret) { connection.bearerAuth(hook.secret); }
-        const response = connection.postSync('', null, JSON.stringify(cloudEvent));
-        // The response body is not stored: a receiver can reflect internal data
-        const code = (response && response.code) || null;
-        // isSuccess is also true for 3xx; the client does not follow redirects, so only 2xx is a delivery
-        if (code >= HTTP_OK_MIN && code <= HTTP_OK_MAX) {
-            return {at: at, code: code, error: null};
-        }
-        let error = 'HTTP ' + code;
-        if (response && response.exception) {
-            error = String(response.exception);
-        } else if (!code) {
-            error = 'No response in ' + TIMEOUT_MS + ' ms';
-        } else if (code >= HTTP_REDIRECT_MIN && code <= HTTP_REDIRECT_MAX) {
-            error = 'HTTP ' + code + ': redirects are not followed. Use the final URL.';
-        }
-        return {at: at, code: code, error: error};
+        return toResult(connectionFor(hook).postSync('', null, JSON.stringify(cloudEvent)), at);
     } catch (e) {
         return {at: at, code: null, error: String((e && e.message) || e)};
     }
@@ -433,6 +540,7 @@ function send(hook, cloudEvent) {
 /**
  * Sends a test event to a webhook from the widget; the webhook does not need to be saved.
  * The result is recorded as lastDelivery only for a saved webhook with the same URL.
+ * ponytail: postSync holds the HTTP handler for up to TIMEOUT_MS; it is one request that a release manager starts
  * @param {Object} ctx HTTP handler context
  * @param {{id?: string, url: string, secret?: string}} input
  * @returns {{error?: string, delivery?: {at: string, code: (number|null), error: (string|null)}, recorded?: boolean}}
@@ -445,7 +553,7 @@ function sendTest(ctx, input) {
     if (resolved.error) { return {error: resolved.error}; }
     const event = toCloudEvent({event: 'TEST', release: null, prevStatus: null, audit: null, at: new Date().toISOString()},
         ctx.project, ctx.currentUser);
-    const delivery = send({url: input.url, secret: resolved.secret}, event);
+    const delivery = sendSync({url: input.url, secret: resolved.secret}, event);
     const recorded = !!prev && prev.url === input.url;
     if (recorded) {
         writeWebhooks(ctx.project, readWebhooks(ctx.project).map(function (h) {
@@ -457,7 +565,7 @@ function sendTest(ctx, input) {
 }
 
 /**
- * Async function: sends the events in the outbox, records lastDelivery, and retries failed events.
+ * Async function: starts the delivery of the outbox after a save or when a retry is due.
  * @param {Object} ctx Async function context
  */
 function deliverWebhooks(ctx) {
@@ -465,46 +573,25 @@ function deliverWebhooks(ctx) {
     if (!project) { return; }
     const outbox = readJson(project, 'webhookOutbox', []);
     if (outbox.length === 0) { return; }
-    if (!ctx.settings || !ctx.settings.outboundWebhooks) {
-        project.extensionProperties.webhookOutbox = null;
-        return;
+    sendNext(ctx, project, outbox);
+}
+
+/**
+ * Async response handler of postAsync: records the result of one event and sends the next event.
+ * @param {Object} ctx Async function context; ctx.response is the HTTP response
+ */
+function onWebhookResponse(ctx) {
+    const project = ctx.load(PROJECT_KEY);
+    if (!project) { return; }
+    const eventId = ctx.load(EVENT_ID_KEY);
+    const outbox = readJson(project, 'webhookOutbox', []);
+    // The entry is missing when the outbox was cleared or another run already recorded this event
+    const entry = outbox.find(function (e) { return e.event && e.event.id === eventId; });
+    if (entry) {
+        const hook = readWebhooks(project).find(function (h) { return h.id === entry.hookId; }) || null;
+        recordAttempt(project, outbox, entry, hook, toResult(ctx.response, new Date(entry.sentAt || Date.now()).toISOString()));
     }
-    const hooks = readWebhooks(project);
-    const hooksById = {};
-    hooks.forEach(function (h) { hooksById[h.id] = h; });
-    const now = Date.now();
-    const remaining = [];
-    let sent = 0;
-    let nextAt = 0;
-    const logEntries = [];
-    outbox.forEach(function (entry) {
-        const hook = hooksById[entry.hookId];
-        if (!hook || !hook.enabled) { return; }
-        if (entry.notBefore > now || sent >= MAX_SENDS_PER_RUN) {
-            remaining.push(entry);
-            nextAt = nextAt ? Math.min(nextAt, entry.notBefore) : entry.notBefore;
-            return;
-        }
-        sent++;
-        const result = send(hook, entry.event);
-        hook.lastDelivery = result;
-        logEntries.push(deliveryLogEntry(hook, entry.event, result, entry.attempt + 1));
-        if (result.error) {
-            log('delivery to "' + (hook.name || hook.url) + '" failed: ' + result.error);
-            const attempt = entry.attempt + 1;
-            if (attempt < MAX_ATTEMPTS) {
-                const retryAt = now + RETRY_DELAY_MS * attempt;
-                remaining.push(Object.assign({}, entry, {attempt: attempt, notBefore: retryAt}));
-                nextAt = nextAt ? Math.min(nextAt, retryAt) : retryAt;
-            }
-        }
-    });
-    writeWebhooks(project, hooks);
-    appendDeliveryLog(project, logEntries);
-    project.extensionProperties.webhookOutbox = remaining.length ? JSON.stringify(remaining) : null;
-    if (remaining.length > 0) {
-        scheduleDelivery(ctx, project, Math.max(0, nextAt - now));
-    }
+    sendNext(ctx, project, outbox);
 }
 
 exports.EVENT_TYPES = EVENT_TYPES;
@@ -520,4 +607,5 @@ exports.toCloudEvent = toCloudEvent;
 exports.enqueue = enqueue;
 exports.sendTest = sendTest;
 exports.deliverWebhooks = deliverWebhooks;
-exports.asyncFunctions = {deliverWebhooks: deliverWebhooks};
+exports.onWebhookResponse = onWebhookResponse;
+exports.asyncFunctions = {deliverWebhooks: deliverWebhooks, onWebhookResponse: onWebhookResponse};
