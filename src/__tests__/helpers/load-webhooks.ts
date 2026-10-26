@@ -1,11 +1,12 @@
 import source from '../../webhooks.js?raw';
 
-export type HttpCall = { url: string; headers: Record<string, string>; payload: string };
+export type HttpCall = { url: string; headers: Record<string, string>; payload: string; handler: string };
 export type HttpResponse = { code?: number; isSuccess?: boolean; exception?: string };
 
 /**
  * Runs webhooks.js (a YouTrack CommonJS module) with a stub of the YouTrack http module.
- * `respond` returns the response for each POST; `calls` records every POST.
+ * `calls` records every POST. postSync returns `respond(url)`; for postAsync, the test calls the named handler
+ * with `respond(url)` as ctx.response.
  */
 export function loadWebhooks(respond: (url: string) => HttpResponse = () => ({code: 200, isSuccess: true})) {
   const calls: HttpCall[] = [];
@@ -24,8 +25,12 @@ export function loadWebhooks(respond: (url: string) => HttpResponse = () => ({co
     }
 
     postSync(_uri: string, _query: unknown, payload: string) {
-      calls.push({url: this.url, headers: this.headers, payload});
+      calls.push({url: this.url, headers: this.headers, payload, handler: ''});
       return respond(this.url);
+    }
+
+    postAsync(_uri: string, _query: unknown, payload: string, handler: string) {
+      calls.push({url: this.url, headers: this.headers, payload, handler});
     }
   }
 
@@ -33,5 +38,5 @@ export function loadWebhooks(respond: (url: string) => HttpResponse = () => ({co
   const moduleExports: Record<string, any> = {};
   // eslint-disable-next-line no-new-func
   new Function('require', 'exports', source)(() => ({Connection}), moduleExports);
-  return {webhooks: moduleExports, calls};
+  return {webhooks: moduleExports, calls, respond};
 }
