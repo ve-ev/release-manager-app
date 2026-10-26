@@ -78,7 +78,7 @@ Select **Add webhook** to add a card. A project can have up to 5 webhooks. Each 
 
 - **Name** — optional. The card header shows it.
 - **URL** — the HTTPS address of the receiver.
-- **Secret** — 32 to 500 characters. The app sends it in the `Authorization` header. Nobody can see a saved secret. When you change the URL of a saved webhook, enter the secret again.
+- **Secret** — 32 to 500 characters. The app sends it in the `Authorization` header. Generate a new random value for each webhook, for example with `openssl rand -hex 32`. Do not use an API token of another service: the app keeps the secret in the project data, so a person with access to the database or a backup can read it. Nobody can see a saved secret. When you change the URL of a saved webhook, enter the secret again.
 - **Events** — the release events that this webhook sends. The **Auto-attach** group is shown only when **Auto-attach by Filter** is on.
 - **Enabled** — clear it to stop deliveries and keep the webhook.
 
