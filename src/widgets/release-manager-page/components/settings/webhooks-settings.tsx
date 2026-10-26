@@ -203,7 +203,7 @@ const WebhookCard: React.FC<CardProps> = ({
               onChange={e => onChange({secret: e.target.value})}
               onBlur={e => onSecretBlur(e.target.value)}
               placeholder={d.hasSecret ? 'Saved. Type a new value to replace it.' : `At least ${MIN_SECRET_LENGTH} characters`}
-              help="Sent as “Authorization: Bearer <secret>”. You cannot see a saved secret again. When you change the URL, enter the secret again."
+              help="Sent as “Authorization: Bearer <secret>”. Generate a new random value for this webhook, for example with “openssl rand -hex 32”. Do not use an API token of another service. You cannot see a saved secret again. When you change the URL, enter the secret again."
               afterInput={d.secret ? (
                 <Button inline className="webhook-secret-toggle" onClick={onToggleSecret}>{secretVisible ? 'Hide' : 'Show'}</Button>
             ) : null}
